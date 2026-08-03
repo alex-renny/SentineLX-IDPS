@@ -1,0 +1,9 @@
+node_modules
+.env
+dist
+coverage
+logs
+__pycache__
+*.pyc
+client/node_modules
+server/node_modules
