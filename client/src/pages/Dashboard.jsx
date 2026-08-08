@@ -1,13 +1,383 @@
-export default function Dashboard() {
-  return (
-    <div className="min-h-screen bg-slate-950 text-white p-10">
-      <h1 className="text-4xl font-bold">
-        🛡 SentinelX Dashboard
-      </h1>
+import { useEffect, useState } from "react";
+import {
+  ShieldAlert,
+  Ban,
+  Activity,
+  Wifi,
+  Cpu,
+  MemoryStick,
+  Server,
+  LockKeyhole,
+  HardDrive,
+} from "lucide-react";
 
-      <p className="text-gray-400 mt-3">
-        Intrusion Detection & Prevention System
-      </p>
+import Layout from "../components/layout/Layout";
+import StatCard from "../components/cards/StatCard";
+import api from "../services/api";
+
+export default function Dashboard() {
+  const [system, setSystem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const fetchSystemStats = async () => {
+    try {
+      const response = await api.get("/system/stats");
+
+      if (response.data.success) {
+        setSystem(response.data.data);
+        setError("");
+      }
+    } catch (err) {
+      console.error("System stats error:", err);
+      setError("Unable to connect to detection engine");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSystemStats();
+
+    const interval = setInterval(fetchSystemStats, 3000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const cpu = system?.system?.cpu?.usage ?? 0;
+  const memory = system?.system?.memory?.usage ?? 0;
+  const disk = system?.system?.disk?.usage ?? 0;
+  const processes = system?.processes?.length ?? 0;
+
+  return (
+    <Layout>
+      {/* Header */}
+      <section className="mb-6">
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">
+              Security Operations Center
+            </p>
+
+            <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+              SentinelX Dashboard
+            </h1>
+
+            <p className="mt-2 max-w-2xl text-sm text-slate-500">
+              Real-time system and security monitoring.
+            </p>
+          </div>
+
+          <div
+            className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 ${
+              error
+                ? "border-red-500/20 bg-red-500/5"
+                : "border-emerald-500/20 bg-emerald-500/5"
+            }`}
+          >
+            <span
+              className={`h-2.5 w-2.5 animate-pulse rounded-full ${
+                error ? "bg-red-400" : "bg-emerald-400"
+              }`}
+            />
+
+            <span
+              className={`text-xs font-medium ${
+                error ? "text-red-400" : "text-emerald-400"
+              }`}
+            >
+              {error ? "Engine Offline" : "Detection Engine Online"}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Stats */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="CPU Usage"
+          value={loading ? "--" : `${cpu}%`}
+          subtitle={`${system?.system?.cpu?.cores ?? "--"} logical cores`}
+          icon={Cpu}
+          iconClass="bg-cyan-500/10 text-cyan-400"
+        />
+
+        <StatCard
+          title="Memory Usage"
+          value={loading ? "--" : `${memory}%`}
+          subtitle={
+            system
+              ? `${system.system.memory.used} GB / ${system.system.memory.total} GB`
+              : "Loading..."
+          }
+          icon={MemoryStick}
+          iconClass="bg-purple-500/10 text-purple-400"
+        />
+
+        <StatCard
+          title="Disk Usage"
+          value={loading ? "--" : `${disk}%`}
+          subtitle={
+            system
+              ? `${system.system.disk.free} GB free`
+              : "Loading..."
+          }
+          icon={HardDrive}
+          iconClass="bg-orange-500/10 text-orange-400"
+        />
+
+        <StatCard
+          title="Processes"
+          value={loading ? "--" : processes}
+          subtitle="Processes monitored"
+          icon={Server}
+          iconClass="bg-emerald-500/10 text-emerald-400"
+        />
+      </section>
+
+      {/* Monitoring */}
+      <section className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-3">
+        {/* System overview */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5 xl:col-span-2">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="font-semibold text-white">
+                System Monitoring
+              </h2>
+
+              <p className="mt-1 text-xs text-slate-500">
+                Live telemetry from your machine
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-emerald-400">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
+              Live
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <MonitorCard
+              title="CPU"
+              value={cpu}
+              unit="%"
+              icon={Cpu}
+            />
+
+            <MonitorCard
+              title="Memory"
+              value={memory}
+              unit="%"
+              icon={MemoryStick}
+            />
+
+            <MonitorCard
+              title="Disk"
+              value={disk}
+              unit="%"
+              icon={HardDrive}
+            />
+          </div>
+
+          <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+            <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-slate-500">
+                Hostname
+              </span>
+
+              <span className="break-all font-mono text-cyan-400">
+                {system?.system?.hostname ?? "Loading..."}
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-slate-500">
+                Operating System
+              </span>
+
+              <span className="text-slate-300">
+                {system?.system?.platform ?? "Loading..."}
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-slate-500">
+                Last Update
+              </span>
+
+              <span className="text-slate-300">
+                {system
+                  ? new Date(
+                      system.system.timestamp
+                    ).toLocaleTimeString()
+                  : "Loading..."}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Security */}
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+          <h2 className="font-semibold text-white">
+            Security Status
+          </h2>
+
+          <p className="mt-1 text-xs text-slate-500">
+            Current protection state
+          </p>
+
+          <div className="mt-6 space-y-4">
+            <SecurityStatus
+              icon={ShieldAlert}
+              title="Threat Detection"
+              status="Active"
+            />
+
+            <SecurityStatus
+              icon={LockKeyhole}
+              title="Firewall"
+              status="Protected"
+            />
+
+            <SecurityStatus
+              icon={Wifi}
+              title="Network Monitor"
+              status="Ready"
+            />
+
+            <SecurityStatus
+              icon={Ban}
+              title="Prevention Engine"
+              status="Standby"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Processes */}
+      <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-white">
+              Top Processes
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Processes currently monitored by SentinelX
+            </p>
+          </div>
+
+          <Activity
+            size={19}
+            className="text-cyan-400"
+          />
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px] text-left">
+            <thead>
+              <tr className="border-b border-slate-800 text-xs uppercase tracking-wider text-slate-600">
+                <th className="pb-3">PID</th>
+                <th className="pb-3">Process</th>
+                <th className="pb-3">User</th>
+                <th className="pb-3">CPU</th>
+                <th className="pb-3">Memory</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {system?.processes?.map((process) => (
+                <tr
+                  key={process.pid}
+                  className="border-b border-slate-900 text-sm"
+                >
+                  <td className="py-3 font-mono text-slate-500">
+                    {process.pid}
+                  </td>
+
+                  <td className="py-3 font-medium text-slate-300">
+                    {process.name}
+                  </td>
+
+                  <td className="max-w-[200px] truncate py-3 text-slate-500">
+                    {process.username}
+                  </td>
+
+                  <td className="py-3 text-cyan-400">
+                    {process.cpu}%
+                  </td>
+
+                  <td className="py-3 text-purple-400">
+                    {process.memory}%
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </Layout>
+  );
+}
+
+function MonitorCard({
+  title,
+  value,
+  unit,
+  icon: Icon,
+}) {
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-slate-500">
+          {title}
+        </span>
+
+        <Icon size={17} className="text-slate-600" />
+      </div>
+
+      <div className="mt-4">
+        <span className="text-3xl font-bold text-white">
+          {value}
+        </span>
+
+        <span className="ml-1 text-sm text-slate-500">
+          {unit}
+        </span>
+      </div>
+
+      <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-800">
+        <div
+          className="h-full rounded-full bg-cyan-400 transition-all duration-700"
+          style={{
+            width: `${Math.min(value, 100)}%`,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function SecurityStatus({
+  icon: Icon,
+  title,
+  status,
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+      <div className="flex items-center gap-3">
+        <div className="rounded-lg bg-cyan-500/10 p-2 text-cyan-400">
+          <Icon size={17} />
+        </div>
+
+        <span className="text-sm text-slate-300">
+          {title}
+        </span>
+      </div>
+
+      <span className="text-xs font-medium text-emerald-400">
+        {status}
+      </span>
     </div>
   );
 }

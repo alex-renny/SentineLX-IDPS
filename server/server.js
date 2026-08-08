@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
+import systemRoutes from "./routes/systemRoutes.js";
 
 import connectDB from "./config/db.js";
 
@@ -18,6 +19,7 @@ app.use(helmet());
 app.use(compression());
 app.use(express.json());
 app.use(morgan("dev"));
+app.use("/api/system", systemRoutes);
 
 app.get("/", (req, res) => {
   res.json({
