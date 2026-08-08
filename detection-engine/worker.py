@@ -1,69 +1,178 @@
-import time
 import json
+import time
 from datetime import datetime
 
+from detection.port_scan import PortScanDetector
+from detection.brute_force import BruteForceDetector
 from network.monitor import capture_traffic
 
 
-def emit_event(event):
+# ============================================================
+# DETECTORS
+# ============================================================
+
+port_scan_detector = PortScanDetector(
+    threshold=30,
+    window_seconds=10
+)
+
+brute_force_detector = BruteForceDetector(
+    threshold=20,
+    window_seconds=60
+)
+
+
+# ============================================================
+# ENGINE STATUS
+# ============================================================
+
+def emit(data):
+    """
+    IMPORTANT:
+    stdout must contain JSON only.
+    """
+
     print(
-        json.dumps(event),
+        json.dumps(data),
         flush=True
     )
 
 
-def run_worker():
+def emit_status(status):
 
-    emit_event({
+    emit({
         "type": "ENGINE_STATUS",
-        "status": "STARTED",
+        "status": status,
         "timestamp": datetime.now().isoformat()
     })
 
-    while True:
 
-        try:
+# ============================================================
+# NETWORK SCAN
+# ============================================================
 
-            packets, alerts = capture_traffic(
-                duration=5
-            )
+def run_network_detection():
 
-            # Send every detected security event
-            for alert in alerts:
+    try:
 
-                emit_event({
-                    "type": "SECURITY_ALERT",
-                    "alert": alert
-                })
+        packets, network_alerts = capture_traffic(
+            duration=5
+        )
 
-            # Send monitoring statistics
-            emit_event({
-                "type": "SCAN_COMPLETE",
-                "timestamp": datetime.now().isoformat(),
-                "packet_count": len(packets),
-                "alert_count": len(alerts)
-            })
+        alerts = list(network_alerts)
 
-        except KeyboardInterrupt:
+        emit({
+            "type": "SCAN_COMPLETE",
+            "timestamp": datetime.now().isoformat(),
+            "packet_count": len(packets),
+            "alert_count": len(alerts),
+            "alerts": alerts
+        })
 
-            emit_event({
-                "type": "ENGINE_STATUS",
-                "status": "STOPPED",
-                "timestamp": datetime.now().isoformat()
+        return alerts
+
+    except Exception as error:
+
+        emit({
+            "type": "ENGINE_ERROR",
+            "timestamp": datetime.now().isoformat(),
+            "component": "network",
+            "error": str(error)
+        })
+
+        return []
+
+
+# ============================================================
+# TEST AUTHENTICATION EVENT
+# ============================================================
+
+def test_brute_force_detection():
+
+    """
+    Development-only authentication event test.
+
+    Real Windows/application authentication events
+    will be connected later.
+    """
+
+    source_ip = "192.168.1.100"
+
+    for _ in range(20):
+
+        event = {
+
+            "event_type": "AUTH_FAILURE",
+
+            "source_ip": source_ip,
+
+            "target": "test-account",
+
+            "service": "SSH",
+
+            "timestamp":
+                datetime.now().isoformat()
+        }
+
+        alert = brute_force_detector.process_event(
+            event
+        )
+
+        if alert:
+
+            emit({
+                "type": "SECURITY_ALERT",
+                "timestamp":
+                    datetime.now().isoformat(),
+                "alert": alert
             })
 
             break
 
-        except Exception as error:
 
-            emit_event({
-                "type": "ENGINE_ERROR",
-                "error": str(error),
-                "timestamp": datetime.now().isoformat()
-            })
+# ============================================================
+# MAIN ENGINE
+# ============================================================
 
-            time.sleep(2)
+def main():
 
+    emit_status("STARTED")
+
+    emit({
+        "type": "ENGINE_INFO",
+        "message":
+            "SentinelX detection engine started",
+        "timestamp":
+            datetime.now().isoformat()
+    })
+
+    while True:
+
+        run_network_detection()
+
+        # Small delay prevents unnecessary CPU usage.
+        time.sleep(1)
+
+
+# ============================================================
+# ENTRY POINT
+# ============================================================
 
 if __name__ == "__main__":
-    run_worker()
+
+    try:
+
+        main()
+
+    except KeyboardInterrupt:
+
+        emit_status("STOPPED")
+
+    except Exception as error:
+
+        emit({
+            "type": "ENGINE_ERROR",
+            "timestamp":
+                datetime.now().isoformat(),
+            "error": str(error)
+        })
