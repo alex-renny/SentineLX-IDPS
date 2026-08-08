@@ -5,6 +5,8 @@ import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
 import systemRoutes from "./routes/systemRoutes.js";
+import networkRoutes from "./routes/networkRoutes.js";
+import detectionRoutes from "./routes/detectionRoutes.js";
 
 import connectDB from "./config/db.js";
 
@@ -19,7 +21,10 @@ app.use(helmet());
 app.use(compression());
 app.use(express.json());
 app.use(morgan("dev"));
+
 app.use("/api/system", systemRoutes);
+app.use("/api/network", networkRoutes);
+app.use("/api/detection", detectionRoutes);
 
 app.get("/", (req, res) => {
   res.json({
