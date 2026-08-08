@@ -17,7 +17,6 @@ PROJECT_ROOT = os.path.dirname(
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-
 # ---------------------------------------------------------
 # Imports
 # ---------------------------------------------------------
@@ -48,6 +47,7 @@ def process_packet(packet):
     ip_layer = packet[IP]
 
     protocol = "OTHER"
+
     source_port = None
     destination_port = None
 
@@ -100,17 +100,20 @@ def capture_traffic(duration=5):
 
         packets.append(packet_data)
 
+        # Send packet to detection engine
         alert = detector.process_packet(packet_data)
 
         if alert:
 
-            # Prevent duplicate alerts for the same
-            # source during one capture session.
-            if not any(
+            # Prevent duplicate alerts during
+            # this capture session.
+            duplicate = any(
                 existing.get("source_ip") == alert.get("source_ip")
                 and existing.get("type") == alert.get("type")
                 for existing in alerts
-            ):
+            )
+
+            if not duplicate:
                 alerts.append(alert)
 
     sniff(
@@ -149,6 +152,10 @@ def main():
     # stdout contains JSON ONLY.
     print(json.dumps(result))
 
+
+# ---------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------
 
 if __name__ == "__main__":
     main()

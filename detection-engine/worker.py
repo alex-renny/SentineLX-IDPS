@@ -5,16 +5,20 @@ from datetime import datetime
 from network.monitor import capture_traffic
 
 
-def run_worker():
-
+def emit_event(event):
     print(
-        json.dumps({
-            "type": "ENGINE_STATUS",
-            "status": "STARTED",
-            "timestamp": datetime.now().isoformat()
-        }),
+        json.dumps(event),
         flush=True
     )
+
+
+def run_worker():
+
+    emit_event({
+        "type": "ENGINE_STATUS",
+        "status": "STARTED",
+        "timestamp": datetime.now().isoformat()
+    })
 
     while True:
 
@@ -24,49 +28,39 @@ def run_worker():
                 duration=5
             )
 
+            # Send every detected security event
             for alert in alerts:
 
-                print(
-                    json.dumps({
-                        "type": "SECURITY_ALERT",
-                        "alert": alert
-                    }),
-                    flush=True
-                )
+                emit_event({
+                    "type": "SECURITY_ALERT",
+                    "alert": alert
+                })
 
-            print(
-                json.dumps({
-                    "type": "SCAN_COMPLETE",
-                    "timestamp": datetime.now().isoformat(),
-                    "packet_count": len(packets),
-                    "alert_count": len(alerts)
-                }),
-                flush=True
-            )
+            # Send monitoring statistics
+            emit_event({
+                "type": "SCAN_COMPLETE",
+                "timestamp": datetime.now().isoformat(),
+                "packet_count": len(packets),
+                "alert_count": len(alerts)
+            })
 
         except KeyboardInterrupt:
 
-            print(
-                json.dumps({
-                    "type": "ENGINE_STATUS",
-                    "status": "STOPPED",
-                    "timestamp": datetime.now().isoformat()
-                }),
-                flush=True
-            )
+            emit_event({
+                "type": "ENGINE_STATUS",
+                "status": "STOPPED",
+                "timestamp": datetime.now().isoformat()
+            })
 
             break
 
         except Exception as error:
 
-            print(
-                json.dumps({
-                    "type": "ENGINE_ERROR",
-                    "error": str(error),
-                    "timestamp": datetime.now().isoformat()
-                }),
-                flush=True
-            )
+            emit_event({
+                "type": "ENGINE_ERROR",
+                "error": str(error),
+                "timestamp": datetime.now().isoformat()
+            })
 
             time.sleep(2)
 

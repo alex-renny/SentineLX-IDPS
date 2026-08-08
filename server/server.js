@@ -10,6 +10,7 @@ import { Server } from "socket.io";
 import systemRoutes from "./routes/systemRoutes.js";
 import networkRoutes from "./routes/networkRoutes.js";
 import detectionRoutes from "./routes/detectionRoutes.js";
+import alertRoutes from "./routes/alertRoutes.js";
 
 import connectDB from "./config/db.js";
 import { initializeAlertService } from "./services/alertService.js";
@@ -58,6 +59,7 @@ app.use(morgan("dev"));
 app.use("/api/system", systemRoutes);
 app.use("/api/network", networkRoutes);
 app.use("/api/detection", detectionRoutes);
+app.use("/api/alerts", alertRoutes);
 
 /*
 |--------------------------------------------------------------------------
