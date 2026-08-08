@@ -87,14 +87,26 @@ export default function Dashboard() {
   socket.on("SECURITY_ALERT", handleSecurityAlert);
   socket.on("SCAN_COMPLETE", handleScanComplete);
 
-  if (socket.connected) {
-    setEngineStatus("Online");
-  }
-
   return () => {
     socket.off("ENGINE_STATUS", handleEngineStatus);
-    socket.off("SECURITY_ALERT", handleSecurityAlert);
     socket.off("SCAN_COMPLETE", handleScanComplete);
+  };
+}, []);
+
+useEffect(() => {
+  const handleSecurityAlert = (alert) => {
+    console.log("🚨 LIVE SECURITY ALERT:", alert);
+
+    setAlerts((previous) => [
+      alert,
+      ...previous,
+    ].slice(0, 20));
+  };
+
+  socket.on("security-alert", handleSecurityAlert);
+
+  return () => {
+    socket.off("security-alert", handleSecurityAlert);
   };
 }, []);
 
@@ -108,6 +120,7 @@ export default function Dashboard() {
       {/* Header */}
       <section className="mb-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">
               Security Operations Center
@@ -122,18 +135,23 @@ export default function Dashboard() {
             </p>
           </div>
 
+          {/* Detection Engine Status */}
           <div
             className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 ${
               engineOnline
                 ? "border-emerald-500/20 bg-emerald-500/5"
-                : "border-red-500/20 bg-red-500/5"
+                : engineStatus === "Offline"
+                ? "border-red-500/20 bg-red-500/5"
+                : "border-yellow-500/20 bg-yellow-500/5"
             }`}
           >
             <span
-              className={`h-2.5 w-2.5 animate-pulse rounded-full ${
+              className={`h-2.5 w-2.5 rounded-full ${
                 engineOnline
-                  ? "bg-emerald-400"
-                  : "bg-red-400"
+                  ? "animate-pulse bg-emerald-400"
+                  : engineStatus === "Offline"
+                  ? "bg-red-400"
+                  : "animate-pulse bg-yellow-400"
               }`}
             />
 
@@ -141,7 +159,9 @@ export default function Dashboard() {
               className={`text-xs font-medium ${
                 engineOnline
                   ? "text-emerald-400"
-                  : "text-red-400"
+                  : engineStatus === "Offline"
+                  ? "text-red-400"
+                  : "text-yellow-400"
               }`}
             >
               {engineStatus === "Online"
@@ -151,24 +171,8 @@ export default function Dashboard() {
                 : "Connecting..."}
             </span>
           </div>
-            <span
-              className={`h-2.5 w-2.5 animate-pulse rounded-full ${
-                error ? "bg-red-400" : "bg-emerald-400"
-              }`}
-            />
 
-            <span
-              className={`text-xs font-medium ${
-                error ? "text-red-400" : "text-emerald-400"
-              }`}
-            >
-              {engineStatus === "Online"
-              ? "Detection Engine Online"
-              : engineStatus === "Offline"
-              ? "Engine Offline"
-              : "Connecting..."}
-            </span>
-          </div>
+        </div>
       </section>
 
       {/* Stats */}
@@ -409,6 +413,101 @@ export default function Dashboard() {
                     ? new Date(alert.timestamp).toLocaleTimeString()
                     : "Now"}
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-white">
+              Live Security Alerts
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Real-time threats detected by SentinelX
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-cyan-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
+            Live
+          </div>
+        </div>
+
+        {alerts.length === 0 ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-6 text-center">
+            <ShieldAlert
+              size={28}
+              className="mx-auto text-slate-700"
+            />
+
+            <p className="mt-3 text-sm text-slate-500">
+              No security alerts detected
+            </p>
+
+            <p className="mt-1 text-xs text-slate-600">
+              SentinelX is monitoring your system
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {alerts.map((alert) => (
+              <div
+                key={alert._id || alert.id}
+                className="rounded-xl border border-red-500/20 bg-red-500/5 p-4"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-lg bg-red-500/10 p-2 text-red-400">
+                      <ShieldAlert size={18} />
+                    </div>
+
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-red-400">
+                          {alert.type}
+                        </span>
+
+                        <span className="rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-400">
+                          {alert.severity}
+                        </span>
+                      </div>
+
+                      <p className="mt-1 text-sm text-slate-400">
+                        {alert.message}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="text-left sm:text-right">
+                    <p className="font-mono text-xs text-cyan-400">
+                      {alert.source_ip || "Unknown IP"}
+                    </p>
+
+                    <p className="mt-1 text-[10px] text-slate-600">
+                      {alert.received_at
+                        ? new Date(
+                            alert.received_at
+                          ).toLocaleTimeString()
+                        : ""}
+                    </p>
+                  </div>
+
+                </div>
+
+                {alert.prevention && (
+                  <div className="mt-3 rounded-lg border border-emerald-500/10 bg-emerald-500/5 px-3 py-2">
+                    <span className="text-xs text-emerald-400">
+                      🛡️ Prevention:{" "}
+                      {alert.prevention.action ||
+                        "Action processed"}
+                    </span>
+                  </div>
+                )}
               </div>
             ))}
           </div>

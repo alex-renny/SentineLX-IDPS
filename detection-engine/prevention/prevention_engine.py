@@ -1,5 +1,6 @@
 import ipaddress
 import os
+import sys
 import subprocess
 from datetime import datetime
 
@@ -15,10 +16,11 @@ class PreventionEngine:
         self.rule_prefix = "SentinelX-IDPS-BLOCK"
 
         print(
-        f"[PREVENTION] Prevention Engine initialized "
-        f"(mode={self.mode})",
-        flush=True
-    )
+            f"[PREVENTION] Prevention Engine initialized "
+            f"(mode={self.mode})",
+            file=sys.stderr,
+            flush=True
+        )
 
     # ========================================================
     # IP VALIDATION

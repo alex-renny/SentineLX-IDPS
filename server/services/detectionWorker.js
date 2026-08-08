@@ -2,7 +2,10 @@ import { spawn } from "child_process";
 import path from "path";
 import { fileURLToPath } from "url";
 
-import { broadcastAlert } from "./alertService.js";
+import {
+  broadcastAlert,
+  broadcastEngineStatus,
+} from "./alertService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,7 +30,7 @@ export function startDetectionWorker() {
     [workerPath],
     {
       cwd: path.dirname(workerPath),
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
     }
   );
 
@@ -45,6 +48,8 @@ export function startDetectionWorker() {
           console.log(
             `🛡️ Detection Engine: ${event.status}`
           );
+
+          broadcastEngineStatus(event.status);
         }
 
         if (event.type === "SCAN_COMPLETE") {
@@ -61,13 +66,13 @@ export function startDetectionWorker() {
 
         if (event.type === "ENGINE_ERROR") {
           console.error(
-            "❌ Detection Engine:",
-            event.error
+            "❌ Detection Engine Error:",
+            event.message
           );
         }
-      } catch {
-        console.log(
-          "Detection engine output:",
+      } catch (error) {
+        console.error(
+          "❌ Invalid detection engine output:",
           line
         );
       }
@@ -75,25 +80,33 @@ export function startDetectionWorker() {
   });
 
   worker.stderr.on("data", (data) => {
-    console.error(
-      "Detection Engine stderr:",
-      data.toString()
-    );
+    const message = data.toString().trim();
+
+    if (message) {
+      console.error(
+        "Detection Engine stderr:",
+        message
+      );
+    }
   });
 
   worker.on("error", (error) => {
     console.error(
       "❌ Failed to start detection engine:",
-      error.message
+      error
     );
+
+    broadcastEngineStatus("STOPPED");
 
     worker = null;
   });
 
-  worker.on("close", (code) => {
+  worker.on("exit", (code) => {
     console.log(
-      `🛡️ Detection engine stopped with code ${code}`
+      `🛑 Detection engine stopped with code ${code}`
     );
+
+    broadcastEngineStatus("STOPPED");
 
     worker = null;
   });
@@ -109,4 +122,6 @@ export function stopDetectionWorker() {
   worker.kill();
 
   worker = null;
+
+  broadcastEngineStatus("STOPPED");
 }

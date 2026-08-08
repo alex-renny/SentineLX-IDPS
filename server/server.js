@@ -13,7 +13,7 @@ import detectionRoutes from "./routes/detectionRoutes.js";
 import alertRoutes from "./routes/alertRoutes.js";
 
 import connectDB from "./config/db.js";
-import { initializeAlertService } from "./services/alertService.js";
+import { initializeAlertService ,getEngineStatus,} from "./services/alertService.js";
 
 import {
   startDetectionWorker,
@@ -99,6 +99,12 @@ initializeAlertService(io);
 
 io.on("connection", (socket) => {
   console.log(`🔌 Dashboard connected: ${socket.id}`);
+
+  // Send current engine status to newly connected dashboard
+  socket.emit("ENGINE_STATUS", {
+    status: getEngineStatus(),
+    timestamp: new Date().toISOString(),
+  });
 
   socket.on("disconnect", () => {
     console.log(`🔌 Dashboard disconnected: ${socket.id}`);
