@@ -1,77 +1,27 @@
-from alert_manager import AlertManager
+from services.alert_manager import AlertManager
 
 
 def main():
 
     manager = AlertManager()
 
-    alerts = [
+    alert = {
+        "type": "PORT_SCAN",
+        "severity": "HIGH",
+        "source_ip": "192.168.1.100",
+        "ports_detected": 30,
+        "window_seconds": 10,
+        "message": "Possible port scan detected"
+    }
 
-        {
-            "type": "PORT_SCAN",
-            "severity": "HIGH",
-            "source_ip": "192.0.2.100",
-            "message":
-                "Possible port scanning detected"
-        },
+    print("\n🚨 Incoming security alert")
+    print(alert)
 
-        {
-            "type": "BRUTE_FORCE",
-            "severity": "HIGH",
-            "source_ip": "192.0.2.101",
-            "target": "admin",
-            "service": "SSH",
-            "message":
-                "Repeated authentication failures"
-        },
+    result = manager.process_alert(alert)
 
-        {
-            "type": "DDOS",
-            "severity": "CRITICAL",
-            "source_ip": "192.0.2.102",
-            "message":
-                "Possible traffic flood detected"
-        }
-    ]
-
-    print(
-        "\n=== SentinelX Alert Manager Test ===\n"
-    )
-
-    for alert in alerts:
-
-        result = manager.process_alert(
-            alert
-        )
-
-        print(result)
-        print()
-
-    print(
-        "=== Recent Alerts ==="
-    )
-
-    for alert in manager.get_recent_alerts():
-
-        print(
-            alert["id"],
-            "|",
-            alert["type"],
-            "|",
-            alert["severity"],
-            "|",
-            alert["source_ip"]
-        )
-
-    print(
-        "\n=== Blocked IPs ==="
-    )
-
-    print(
-        manager.get_blocked_ips()
-    )
+    print("\n🛡️ Alert Manager result")
+    print(result)
 
 
 if __name__ == "__main__":
-
     main()

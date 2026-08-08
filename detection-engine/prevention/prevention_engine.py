@@ -1,212 +1,233 @@
-from datetime import datetime, timedelta
-from .firewall import WindowsFirewall
+import ipaddress
+import os
+import subprocess
+from datetime import datetime
+
 
 class PreventionEngine:
 
-    def __init__(
-    self,
-    dry_run=True,
-    default_block_seconds=300
-):
+    def __init__(self):
+        self.mode = os.getenv(
+            "SENTINELX_PREVENTION_MODE",
+            "test"
+        ).lower()
 
-        self.dry_run = dry_run
+        self.rule_prefix = "SentinelX-IDPS-BLOCK"
 
-        self.default_block_seconds = (
-            default_block_seconds
+        print(
+            f"🛡️ Prevention Engine initialized "
+            f"(mode={self.mode})"
         )
 
-        self.trusted_ips = {
-            "127.0.0.1",
-            "::1"
-        }
-
-        self.blocked_ips = {}
-
     # ========================================================
-    # TRUSTED IP
+    # IP VALIDATION
     # ========================================================
 
-    def is_trusted(self, ip):
+    def validate_ip(self, ip):
 
-        return ip in self.trusted_ips
+        try:
+            address = ipaddress.ip_address(ip)
 
-    def add_trusted_ip(self, ip):
+            if address.is_unspecified:
+                return False
 
-        self.trusted_ips.add(ip)
+            if address.is_multicast:
+                return False
 
-    def remove_trusted_ip(self, ip):
+            if address.is_loopback:
+                return False
 
-        self.trusted_ips.discard(ip)
+            return True
 
-    # ========================================================
-    # BLOCK DECISION
-    # ========================================================
-
-    def should_block(self, alert):
-
-        if not alert:
+        except ValueError:
             return False
 
-        source_ip = alert.get("source_ip")
+    # ========================================================
+    # RULE NAME
+    # ========================================================
 
-        if not source_ip:
-            return False
+    def rule_name(self, ip):
 
-        if self.is_trusted(source_ip):
-            return False
+        safe_ip = ip.replace(":", "_").replace(".", "_")
 
-        severity = (
-            alert.get("severity", "")
-            .upper()
-        )
-
-        return severity in {
-            "HIGH",
-            "CRITICAL"
-        }
+        return f"{self.rule_prefix}-{safe_ip}"
 
     # ========================================================
     # BLOCK IP
     # ========================================================
 
-    def block_ip(
-        self,
-        ip,
-        reason="Security alert",
-        duration=None
-    ):
+    def block_ip(self, ip, reason="Security alert"):
 
-        if self.is_trusted(ip):
+        timestamp = datetime.now().isoformat()
+
+        if not self.validate_ip(ip):
 
             return {
                 "success": False,
-                "action": "SKIPPED",
-                "reason": "Trusted IP",
-                "ip": ip
+                "action": "BLOCK",
+                "ip": ip,
+                "reason": "Invalid or protected IP",
+                "timestamp": timestamp
             }
 
-        if duration is None:
-
-            duration = (
-                self.default_block_seconds
-            )
-
-        expires_at = (
-            datetime.now()
-            + timedelta(seconds=duration)
-        )
-
-        self.blocked_ips[ip] = {
-            "ip": ip,
-            "reason": reason,
-            "blocked_at":
-                datetime.now().isoformat(),
-            "expires_at":
-                expires_at.isoformat()
-        }
+        rule = self.rule_name(ip)
 
         # ----------------------------------------------------
-        # DRY RUN
+        # TEST MODE
         # ----------------------------------------------------
 
-        if self.dry_run:
+        if self.mode != "active":
 
             return {
                 "success": True,
-                "action": "DRY_RUN_BLOCK",
+                "action": "BLOCK_SIMULATED",
                 "ip": ip,
+                "rule": rule,
                 "reason": reason,
-                "expires_at":
-                    expires_at.isoformat()
+                "mode": self.mode,
+                "timestamp": timestamp
             }
 
         # ----------------------------------------------------
-        # REAL WINDOWS FIREWALL BLOCK
+        # ACTIVE WINDOWS FIREWALL BLOCK
         # ----------------------------------------------------
 
-        firewall_result = WindowsFirewall.block_ip(ip)
+        command = [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            (
+                f"New-NetFirewallRule "
+                f"-DisplayName '{rule}' "
+                f"-Direction Inbound "
+                f"-Action Block "
+                f"-RemoteAddress '{ip}' "
+                f"-Profile Any "
+                f"-Enabled True "
+                f"-ErrorAction Stop"
+            )
+        ]
 
-        return {
-            **firewall_result,
-            "reason": reason,
-            "expires_at":
-                expires_at.isoformat()
-        }
+        try:
+
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
+
+            if result.returncode != 0:
+
+                return {
+                    "success": False,
+                    "action": "BLOCK_FAILED",
+                    "ip": ip,
+                    "rule": rule,
+                    "reason": reason,
+                    "error": result.stderr.strip(),
+                    "timestamp": timestamp
+                }
+
+            return {
+                "success": True,
+                "action": "BLOCKED",
+                "ip": ip,
+                "rule": rule,
+                "reason": reason,
+                "mode": self.mode,
+                "timestamp": timestamp
+            }
+
+        except Exception as error:
+
+            return {
+                "success": False,
+                "action": "BLOCK_FAILED",
+                "ip": ip,
+                "rule": rule,
+                "reason": reason,
+                "error": str(error),
+                "timestamp": timestamp
+            }
 
     # ========================================================
-    # UNBLOCK
+    # UNBLOCK IP
     # ========================================================
 
     def unblock_ip(self, ip):
 
-        if ip in self.blocked_ips:
+        timestamp = datetime.now().isoformat()
 
-            del self.blocked_ips[ip]
+        if not self.validate_ip(ip):
+
+            return {
+                "success": False,
+                "action": "UNBLOCK",
+                "ip": ip,
+                "reason": "Invalid IP",
+                "timestamp": timestamp
+            }
+
+        rule = self.rule_name(ip)
+
+        # ----------------------------------------------------
+        # TEST MODE
+        # ----------------------------------------------------
+
+        if self.mode != "active":
 
             return {
                 "success": True,
-                "action": "UNBLOCKED",
-                "ip": ip
+                "action": "UNBLOCK_SIMULATED",
+                "ip": ip,
+                "rule": rule,
+                "mode": self.mode,
+                "timestamp": timestamp
             }
 
-        return {
-            "success": False,
-            "action": "NOT_FOUND",
-            "ip": ip
-        }
+        # ----------------------------------------------------
+        # REMOVE WINDOWS FIREWALL RULE
+        # ----------------------------------------------------
 
-    # ========================================================
-    # CLEAN EXPIRED BLOCKS
-    # ========================================================
-
-    def cleanup_expired(self):
-
-        now = datetime.now()
-
-        expired = []
-
-        for ip, data in list(
-            self.blocked_ips.items()
-        ):
-
-            expires_at = datetime.fromisoformat(
-                data["expires_at"]
+        command = [
+            "powershell",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            (
+                f"Remove-NetFirewallRule "
+                f"-DisplayName '{rule}' "
+                f"-ErrorAction SilentlyContinue"
             )
+        ]
 
-            if now >= expires_at:
+        try:
 
-                expired.append(ip)
-
-        for ip in expired:
-
-            self.unblock_ip(ip)
-
-        return expired
-
-    # ========================================================
-    # PROCESS ALERT
-    # ========================================================
-
-    def process_alert(self, alert):
-
-        if not alert:
-
-            return None
-
-        if not self.should_block(alert):
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                timeout=15
+            )
 
             return {
-                "action": "MONITOR",
-                "ip":
-                    alert.get("source_ip"),
-                "reason":
-                    "Alert does not meet blocking policy"
+                "success": result.returncode == 0,
+                "action": "UNBLOCKED",
+                "ip": ip,
+                "rule": rule,
+                "mode": self.mode,
+                "timestamp": timestamp
             }
 
-        return self.block_ip(
-            ip=alert.get("source_ip"),
-            reason=alert.get(
-                "message",
-                alert.get("type", "Security alert")
-            )
-        )
+        except Exception as error:
+
+            return {
+                "success": False,
+                "action": "UNBLOCK_FAILED",
+                "ip": ip,
+                "rule": rule,
+                "error": str(error),
+                "timestamp": timestamp
+            }
