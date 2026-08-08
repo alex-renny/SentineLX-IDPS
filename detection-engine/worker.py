@@ -4,7 +4,10 @@ from datetime import datetime
 
 from detection.port_scan import PortScanDetector
 from detection.brute_force import BruteForceDetector
+from detection.ddos import DDoSDetector
+
 from network.monitor import capture_traffic
+from services.alert_manager import AlertManager
 
 
 # ============================================================
@@ -20,6 +23,20 @@ brute_force_detector = BruteForceDetector(
     threshold=20,
     window_seconds=60
 )
+
+ddos_detector = DDoSDetector(
+    threshold=1000,
+    window_seconds=1
+)
+
+alert_manager = AlertManager()
+
+
+# ============================================================
+# ALERT MANAGER
+# ============================================================
+
+alert_manager = AlertManager()
 
 
 # ============================================================
@@ -48,6 +65,40 @@ def emit_status(status):
 
 
 # ============================================================
+# PROCESS ALERTS
+# ============================================================
+
+def process_alerts(alerts):
+
+    processed_alerts = []
+
+    for alert in alerts:
+
+        try:
+
+            processed = alert_manager.process_alert(
+                alert
+            )
+
+            if processed:
+
+                processed_alerts.append(
+                    processed
+                )
+
+        except Exception as error:
+
+            emit({
+                "type": "ENGINE_ERROR",
+                "timestamp": datetime.now().isoformat(),
+                "component": "alert_manager",
+                "error": str(error)
+            })
+
+    return processed_alerts
+
+
+# ============================================================
 # NETWORK SCAN
 # ============================================================
 
@@ -59,7 +110,10 @@ def run_network_detection():
             duration=5
         )
 
-        alerts = list(network_alerts)
+        # Send detected alerts through Alert Manager
+        alerts = process_alerts(
+            network_alerts
+        )
 
         emit({
             "type": "SCAN_COMPLETE",
@@ -120,11 +174,15 @@ def test_brute_force_detection():
 
         if alert:
 
+            processed = alert_manager.process_alert(
+                alert
+            )
+
             emit({
                 "type": "SECURITY_ALERT",
                 "timestamp":
                     datetime.now().isoformat(),
-                "alert": alert
+                "alert": processed
             })
 
             break
