@@ -14,12 +14,12 @@ def main():
         "message": "Possible port scan detected"
     }
 
-    print("\n🚨 Incoming security alert")
+    print("\n Incoming security alert")
     print(alert)
 
     result = manager.process_alert(alert)
 
-    print("\n🛡️ Alert Manager result")
+    print("\n Alert Manager result")
     print(result)
 
 

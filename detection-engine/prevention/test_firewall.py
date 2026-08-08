@@ -17,7 +17,7 @@ def main():
 
     if result.get("success"):
 
-        print("\n✅ Firewall rule created.")
+        print("\n Firewall rule created.")
 
         print("\nRemoving test rule...")
 
@@ -28,7 +28,7 @@ def main():
         print(result)
 
         if result.get("success"):
-            print("\n✅ Test rule removed.")
+            print("\n Test rule removed.")
 
 
 if __name__ == "__main__":

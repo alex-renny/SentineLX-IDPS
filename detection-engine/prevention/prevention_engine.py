@@ -15,9 +15,10 @@ class PreventionEngine:
         self.rule_prefix = "SentinelX-IDPS-BLOCK"
 
         print(
-            f"🛡️ Prevention Engine initialized "
-            f"(mode={self.mode})"
-        )
+        f"[PREVENTION] Prevention Engine initialized "
+        f"(mode={self.mode})",
+        flush=True
+    )
 
     # ========================================================
     # IP VALIDATION

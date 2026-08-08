@@ -14,11 +14,15 @@ import {
 import Layout from "../components/layout/Layout";
 import StatCard from "../components/cards/StatCard";
 import api from "../services/api";
+import socket from "../services/socket";
 
 export default function Dashboard() {
   const [system, setSystem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [alerts, setAlerts] = useState([]);
+  const [engineStatus, setEngineStatus] = useState("Connecting");
+  const engineOnline = engineStatus === "Online" && !error;
 
   const fetchSystemStats = async () => {
     try {
@@ -43,6 +47,56 @@ export default function Dashboard() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+  const handleEngineStatus = (data) => {
+    console.log("Engine status:", data);
+
+    if (data.status === "STARTED") {
+      setEngineStatus("Online");
+    }
+
+    if (data.status === "STOPPED") {
+      setEngineStatus("Offline");
+    }
+  };
+
+  const handleSecurityAlert = (data) => {
+    console.log("🚨 Security alert:", data);
+
+    const alert = data.alert || data;
+
+    setAlerts((previous) => [
+      alert,
+      ...previous,
+    ].slice(0, 20));
+  };
+
+  const handleScanComplete = (data) => {
+    console.log("📡 Network scan:", data);
+
+    if (data.alerts?.length) {
+      setAlerts((previous) => [
+        ...data.alerts,
+        ...previous,
+      ].slice(0, 20));
+    }
+  };
+
+  socket.on("ENGINE_STATUS", handleEngineStatus);
+  socket.on("SECURITY_ALERT", handleSecurityAlert);
+  socket.on("SCAN_COMPLETE", handleScanComplete);
+
+  if (socket.connected) {
+    setEngineStatus("Online");
+  }
+
+  return () => {
+    socket.off("ENGINE_STATUS", handleEngineStatus);
+    socket.off("SECURITY_ALERT", handleSecurityAlert);
+    socket.off("SCAN_COMPLETE", handleScanComplete);
+  };
+}, []);
 
   const cpu = system?.system?.cpu?.usage ?? 0;
   const memory = system?.system?.memory?.usage ?? 0;
@@ -70,11 +124,33 @@ export default function Dashboard() {
 
           <div
             className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 ${
-              error
-                ? "border-red-500/20 bg-red-500/5"
-                : "border-emerald-500/20 bg-emerald-500/5"
+              engineOnline
+                ? "border-emerald-500/20 bg-emerald-500/5"
+                : "border-red-500/20 bg-red-500/5"
             }`}
           >
+            <span
+              className={`h-2.5 w-2.5 animate-pulse rounded-full ${
+                engineOnline
+                  ? "bg-emerald-400"
+                  : "bg-red-400"
+              }`}
+            />
+
+            <span
+              className={`text-xs font-medium ${
+                engineOnline
+                  ? "text-emerald-400"
+                  : "text-red-400"
+              }`}
+            >
+              {engineStatus === "Online"
+                ? "Detection Engine Online"
+                : engineStatus === "Offline"
+                ? "Engine Offline"
+                : "Connecting..."}
+            </span>
+          </div>
             <span
               className={`h-2.5 w-2.5 animate-pulse rounded-full ${
                 error ? "bg-red-400" : "bg-emerald-400"
@@ -86,10 +162,13 @@ export default function Dashboard() {
                 error ? "text-red-400" : "text-emerald-400"
               }`}
             >
-              {error ? "Engine Offline" : "Detection Engine Online"}
+              {engineStatus === "Online"
+              ? "Detection Engine Online"
+              : engineStatus === "Offline"
+              ? "Engine Offline"
+              : "Connecting..."}
             </span>
           </div>
-        </div>
       </section>
 
       {/* Stats */}
@@ -252,6 +331,88 @@ export default function Dashboard() {
             />
           </div>
         </div>
+      </section>
+
+      {/* Security Alerts */}
+      <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
+        <div className="mb-5 flex items-center justify-between">
+          <div>
+            <h2 className="font-semibold text-white">
+              Live Security Alerts
+            </h2>
+
+            <p className="mt-1 text-xs text-slate-500">
+              Real-time threats detected by SentinelX
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-cyan-400">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
+            {alerts.length} alerts
+          </div>
+        </div>
+
+        {alerts.length === 0 ? (
+          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-8 text-center">
+            <ShieldAlert
+              size={30}
+              className="mx-auto text-slate-700"
+            />
+
+            <p className="mt-3 text-sm text-slate-500">
+              No security threats detected
+            </p>
+
+            <p className="mt-1 text-xs text-slate-700">
+              SentinelX is actively monitoring your system.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {alerts.map((alert, index) => (
+              <div
+                key={alert.id || `${alert.type}-${index}`}
+                className="flex flex-col gap-3 rounded-xl border border-red-500/10 bg-red-500/5 p-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="rounded-lg bg-red-500/10 p-2 text-red-400">
+                    <ShieldAlert size={18} />
+                  </div>
+
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-semibold text-white">
+                        {alert.type || "SECURITY ALERT"}
+                      </span>
+
+                      <span className="rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-semibold uppercase text-red-400">
+                        {alert.severity || "HIGH"}
+                      </span>
+                    </div>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      {alert.message || "Suspicious activity detected"}
+                    </p>
+
+                    {alert.source_ip && (
+                      <p className="mt-1 font-mono text-xs text-cyan-400">
+                        Source: {alert.source_ip}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="text-xs text-slate-600">
+                  {alert.detected_at
+                    ? new Date(alert.detected_at).toLocaleTimeString()
+                    : alert.timestamp
+                    ? new Date(alert.timestamp).toLocaleTimeString()
+                    : "Now"}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Processes */}

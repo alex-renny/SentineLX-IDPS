@@ -37,7 +37,7 @@ def main():
 
         if alert:
 
-            print("\n🚨 DDOS DETECTED")
+            print("\n DDOS DETECTED")
             print(alert)
 
             break

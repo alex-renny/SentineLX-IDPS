@@ -32,7 +32,7 @@ def main():
         )
 
         if alert:
-            print("\n🚨 BRUTE FORCE DETECTED")
+            print("\n BRUTE FORCE DETECTED")
             print(alert)
 
 
