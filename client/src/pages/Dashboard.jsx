@@ -72,7 +72,7 @@ export default function Dashboard() {
   // ----------------------------------------------------------
 
   const handleEngineStatus = (data) => {
-    console.log("Engine status:", data);
+    console.log("🛡️ Engine status:", data);
 
     if (data.status === "STARTED") {
       setEngineStatus("Online");
@@ -90,15 +90,12 @@ export default function Dashboard() {
   const handleSecurityAlert = (data) => {
     console.log("🚨 LIVE SECURITY ALERT:", data);
 
-    // Server sends:
-    // { ...alert, received_at: ... }
-
     const alert = data.alert || data;
 
     setAlerts((previous) => {
-      // Prevent duplicate alerts
       const alertId = alert._id || alert.id;
 
+      // Prevent duplicate MongoDB/socket alert
       if (
         alertId &&
         previous.some(
@@ -117,54 +114,12 @@ export default function Dashboard() {
   };
 
   // ----------------------------------------------------------
-  // SCAN COMPLETE
-  // ----------------------------------------------------------
-
-  const handleScanComplete = (data) => {
-  console.log("📡 Network scan:", data);
-
-  if (data.alerts?.length) {
-    setAlerts((previous) => {
-      const combined = [
-        ...data.alerts,
-        ...previous,
-      ];
-
-      const unique = combined.filter(
-        (alert, index, self) => {
-          const id = alert._id || alert.id;
-
-          if (!id) {
-            return true;
-          }
-
-          return (
-            index ===
-            self.findIndex(
-              (item) =>
-                (item._id || item.id) === id
-            )
-          );
-        }
-      );
-
-      return unique.slice(0, 20);
-    });
-  }
-};
-
-  // ----------------------------------------------------------
-  // SOCKET LISTENERS
+  // SOCKET.IO LISTENERS
   // ----------------------------------------------------------
 
   socket.on(
     "ENGINE_STATUS",
     handleEngineStatus
-  );
-
-  socket.on(
-    "SCAN_COMPLETE",
-    handleScanComplete
   );
 
   socket.on(
@@ -180,11 +135,6 @@ export default function Dashboard() {
     socket.off(
       "ENGINE_STATUS",
       handleEngineStatus
-    );
-
-    socket.off(
-      "SCAN_COMPLETE",
-      handleScanComplete
     );
 
     socket.off(
@@ -503,13 +453,58 @@ export default function Dashboard() {
 
                 </div>
 
+                {(alert.ports_detected || alert.window_seconds) && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+
+                    {alert.ports_detected && (
+                      <span className="rounded-lg border border-orange-500/10 bg-orange-500/5 px-3 py-1.5 text-[11px] text-orange-400">
+                        🔌 {alert.ports_detected} ports detected
+                      </span>
+                    )}
+
+                    {alert.window_seconds && (
+                      <span className="rounded-lg border border-purple-500/10 bg-purple-500/5 px-3 py-1.5 text-[11px] text-purple-400">
+                        ⏱️ {alert.window_seconds}s detection window
+                      </span>
+                    )}
+
+                  </div>
+                )}
+
                 {alert.prevention && (
-                  <div className="mt-3 rounded-lg border border-emerald-500/10 bg-emerald-500/5 px-3 py-2">
-                    <span className="text-xs text-emerald-400">
-                      🛡️ Prevention:{" "}
-                      {alert.prevention.action ||
-                        "Action processed"}
-                    </span>
+                  <div className="mt-3 rounded-xl border border-emerald-500/10 bg-emerald-500/5 p-3">
+                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
+
+                      <span className="font-semibold text-emerald-400">
+                        🛡️ Prevention
+                      </span>
+
+                      <span className="text-slate-400">
+                        Action:
+                        <span className="ml-1 font-semibold text-emerald-300">
+                          {alert.prevention.action || "PROCESSED"}
+                        </span>
+                      </span>
+
+                      {alert.prevention.mode && (
+                        <span className="text-slate-400">
+                          Mode:
+                          <span className="ml-1 font-semibold text-cyan-400">
+                            {alert.prevention.mode}
+                          </span>
+                        </span>
+                      )}
+
+                      {alert.prevention.ip && (
+                        <span className="font-mono text-slate-400">
+                          IP:
+                          <span className="ml-1 text-cyan-400">
+                            {alert.prevention.ip}
+                          </span>
+                        </span>
+                      )}
+
+                    </div>
                   </div>
                 )}
               </div>
