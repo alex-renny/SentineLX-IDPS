@@ -49,6 +49,28 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
+  // ----------------------------------------------------------
+  // Load existing alerts from MongoDB
+  // ----------------------------------------------------------
+
+  const fetchAlerts = async () => {
+    try {
+      const response = await api.get("/alerts?limit=20");
+
+      if (response.data.success) {
+        setAlerts(response.data.alerts || []);
+      }
+    } catch (err) {
+      console.error("Alert fetch error:", err);
+    }
+  };
+
+  fetchAlerts();
+
+  // ----------------------------------------------------------
+  // ENGINE STATUS
+  // ----------------------------------------------------------
+
   const handleEngineStatus = (data) => {
     console.log("Engine status:", data);
 
@@ -61,52 +83,114 @@ export default function Dashboard() {
     }
   };
 
+  // ----------------------------------------------------------
+  // LIVE SECURITY ALERT
+  // ----------------------------------------------------------
+
   const handleSecurityAlert = (data) => {
-    console.log("🚨 Security alert:", data);
+    console.log("🚨 LIVE SECURITY ALERT:", data);
+
+    // Server sends:
+    // { ...alert, received_at: ... }
 
     const alert = data.alert || data;
 
-    setAlerts((previous) => [
-      alert,
-      ...previous,
-    ].slice(0, 20));
+    setAlerts((previous) => {
+      // Prevent duplicate alerts
+      const alertId = alert._id || alert.id;
+
+      if (
+        alertId &&
+        previous.some(
+          (item) =>
+            (item._id || item.id) === alertId
+        )
+      ) {
+        return previous;
+      }
+
+      return [
+        alert,
+        ...previous,
+      ].slice(0, 20);
+    });
   };
+
+  // ----------------------------------------------------------
+  // SCAN COMPLETE
+  // ----------------------------------------------------------
 
   const handleScanComplete = (data) => {
-    console.log("📡 Network scan:", data);
+  console.log("📡 Network scan:", data);
 
-    if (data.alerts?.length) {
-      setAlerts((previous) => [
+  if (data.alerts?.length) {
+    setAlerts((previous) => {
+      const combined = [
         ...data.alerts,
         ...previous,
-      ].slice(0, 20));
-    }
-  };
+      ];
 
-  socket.on("ENGINE_STATUS", handleEngineStatus);
-  socket.on("SECURITY_ALERT", handleSecurityAlert);
-  socket.on("SCAN_COMPLETE", handleScanComplete);
+      const unique = combined.filter(
+        (alert, index, self) => {
+          const id = alert._id || alert.id;
+
+          if (!id) {
+            return true;
+          }
+
+          return (
+            index ===
+            self.findIndex(
+              (item) =>
+                (item._id || item.id) === id
+            )
+          );
+        }
+      );
+
+      return unique.slice(0, 20);
+    });
+  }
+};
+
+  // ----------------------------------------------------------
+  // SOCKET LISTENERS
+  // ----------------------------------------------------------
+
+  socket.on(
+    "ENGINE_STATUS",
+    handleEngineStatus
+  );
+
+  socket.on(
+    "SCAN_COMPLETE",
+    handleScanComplete
+  );
+
+  socket.on(
+    "security-alert",
+    handleSecurityAlert
+  );
+
+  // ----------------------------------------------------------
+  // CLEANUP
+  // ----------------------------------------------------------
 
   return () => {
-    socket.off("ENGINE_STATUS", handleEngineStatus);
-    socket.off("SCAN_COMPLETE", handleScanComplete);
-  };
-}, []);
+    socket.off(
+      "ENGINE_STATUS",
+      handleEngineStatus
+    );
 
-useEffect(() => {
-  const handleSecurityAlert = (alert) => {
-    console.log("🚨 LIVE SECURITY ALERT:", alert);
+    socket.off(
+      "SCAN_COMPLETE",
+      handleScanComplete
+    );
 
-    setAlerts((previous) => [
-      alert,
-      ...previous,
-    ].slice(0, 20));
-  };
-
-  socket.on("security-alert", handleSecurityAlert);
-
-  return () => {
-    socket.off("security-alert", handleSecurityAlert);
+    socket.off(
+      "security-alert",
+      handleSecurityAlert
+    );
   };
 }, []);
 
@@ -338,86 +422,6 @@ useEffect(() => {
       </section>
 
       {/* Security Alerts */}
-      <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <div className="mb-5 flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold text-white">
-              Live Security Alerts
-            </h2>
-
-            <p className="mt-1 text-xs text-slate-500">
-              Real-time threats detected by SentinelX
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 text-xs text-cyan-400">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-cyan-400" />
-            {alerts.length} alerts
-          </div>
-        </div>
-
-        {alerts.length === 0 ? (
-          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-8 text-center">
-            <ShieldAlert
-              size={30}
-              className="mx-auto text-slate-700"
-            />
-
-            <p className="mt-3 text-sm text-slate-500">
-              No security threats detected
-            </p>
-
-            <p className="mt-1 text-xs text-slate-700">
-              SentinelX is actively monitoring your system.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {alerts.map((alert, index) => (
-              <div
-                key={alert.id || `${alert.type}-${index}`}
-                className="flex flex-col gap-3 rounded-xl border border-red-500/10 bg-red-500/5 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="rounded-lg bg-red-500/10 p-2 text-red-400">
-                    <ShieldAlert size={18} />
-                  </div>
-
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-white">
-                        {alert.type || "SECURITY ALERT"}
-                      </span>
-
-                      <span className="rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-semibold uppercase text-red-400">
-                        {alert.severity || "HIGH"}
-                      </span>
-                    </div>
-
-                    <p className="mt-1 text-xs text-slate-400">
-                      {alert.message || "Suspicious activity detected"}
-                    </p>
-
-                    {alert.source_ip && (
-                      <p className="mt-1 font-mono text-xs text-cyan-400">
-                        Source: {alert.source_ip}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="text-xs text-slate-600">
-                  {alert.detected_at
-                    ? new Date(alert.detected_at).toLocaleTimeString()
-                    : alert.timestamp
-                    ? new Date(alert.timestamp).toLocaleTimeString()
-                    : "Now"}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
 
       <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
         <div className="mb-5 flex items-center justify-between">

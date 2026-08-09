@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -15,12 +16,24 @@ alert_manager = AlertManager()
 
 
 # ============================================================
+# TEST MODE
+# ============================================================
+
+TEST_ALERT = os.getenv(
+    "SENTINELX_TEST_ALERT",
+    "false"
+).lower() == "true"
+
+
+test_alert_sent = False
+
+
+# ============================================================
 # JSON OUTPUT
 # ============================================================
 
 def emit(data):
     """
-    IMPORTANT:
     stdout must contain JSON only.
     """
 
@@ -44,6 +57,38 @@ def emit_status(status):
 
 
 # ============================================================
+# CONTROLLED TEST ALERT
+# ============================================================
+
+def generate_test_alert():
+
+    alert = {
+        "type": "PORT_SCAN",
+        "severity": "HIGH",
+        "source_ip": "192.168.1.100",
+        "destination_ip": "192.168.1.10",
+        "ports_detected": 30,
+        "window_seconds": 10,
+        "timestamp": datetime.now().isoformat(),
+        "message": (
+            "TEST: Possible port scanning detected from "
+            "192.168.1.100: 30 unique ports within 10 seconds"
+        )
+    }
+
+    processed = alert_manager.process_alert(alert)
+
+    if not processed:
+        return
+
+    emit({
+        "type": "SECURITY_ALERT",
+        "timestamp": datetime.now().isoformat(),
+        "alert": processed
+    })
+
+
+# ============================================================
 # NETWORK DETECTION
 # ============================================================
 
@@ -57,7 +102,6 @@ def run_network_detection():
 
         processed_alerts = []
 
-        # Process every detected security alert
         for alert in detected_alerts:
 
             processed = alert_manager.process_alert(
@@ -70,14 +114,12 @@ def run_network_detection():
                     processed
                 )
 
-                # Send individual live security event
                 emit({
                     "type": "SECURITY_ALERT",
                     "timestamp": datetime.now().isoformat(),
                     "alert": processed
                 })
 
-        # Send scan summary
         emit({
             "type": "SCAN_COMPLETE",
             "timestamp": datetime.now().isoformat(),
@@ -106,6 +148,8 @@ def run_network_detection():
 
 def main():
 
+    global test_alert_sent
+
     emit_status("STARTED")
 
     emit({
@@ -116,9 +160,22 @@ def main():
 
     while True:
 
+        # ----------------------------------------------------
+        # SAFE INTEGRATION TEST
+        # ----------------------------------------------------
+
+        if TEST_ALERT and not test_alert_sent:
+
+            generate_test_alert()
+
+            test_alert_sent = True
+
+        # ----------------------------------------------------
+        # REAL NETWORK DETECTION
+        # ----------------------------------------------------
+
         run_network_detection()
 
-        # Prevent unnecessary CPU usage
         time.sleep(1)
 
 

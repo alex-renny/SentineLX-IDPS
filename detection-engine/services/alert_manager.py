@@ -71,9 +71,11 @@ class AlertManager:
             "BRUTE_FORCE"
         ]:
 
-            prevention_result = self.prevention_engine.block_ip(
-                source_ip,
-                reason=f"{alert_type} detected"
+            prevention_result = (
+                self.prevention_engine.block_ip(
+                    source_ip,
+                    reason=f"{alert_type} detected"
+                )
             )
 
         normalized["prevention"] = prevention_result
@@ -88,40 +90,54 @@ class AlertManager:
     def _normalize_alert(self, alert):
 
         return {
-            "id": self._generate_id(),
+    "id": self._generate_id(),
 
-            "type": alert.get(
-                "type",
-                "UNKNOWN"
-            ),
+    "type": alert.get(
+        "type",
+        "UNKNOWN"
+    ),
 
-            "severity": alert.get(
-                "severity",
-                "MEDIUM"
-            ),
+    "severity": alert.get(
+        "severity",
+        "MEDIUM"
+    ),
 
-            "source_ip": alert.get(
-                "source_ip"
-            ),
+    "source_ip": alert.get(
+        "source_ip"
+    ),
 
-            "target": alert.get(
-                "target"
-            ),
+    "destination_ip": alert.get(
+        "destination_ip"
+    ),
 
-            "service": alert.get(
-                "service"
-            ),
+    "ports_detected": alert.get(
+        "ports_detected",
+        0
+    ),
 
-            "message": alert.get(
-                "message",
-                "Security event detected"
-            ),
+    "window_seconds": alert.get(
+        "window_seconds",
+        0
+    ),
 
-            "detected_at": alert.get(
-                "timestamp",
-                datetime.now().isoformat()
-            )
-        }
+    "target": alert.get(
+        "target"
+    ),
+
+    "service": alert.get(
+        "service"
+    ),
+
+    "message": alert.get(
+        "message",
+        "Security event detected"
+    ),
+
+    "detected_at": alert.get(
+        "timestamp",
+        datetime.now().isoformat()
+    )
+}
 
 
     # ========================================================
@@ -152,7 +168,15 @@ class AlertManager:
 
     def get_blocked_ips(self):
 
-        return self.prevention_engine.blocked_ips
+        # PreventionEngine currently may not expose
+        # blocked_ips, so safely return an empty list
+        # if the attribute does not exist.
+
+        return getattr(
+            self.prevention_engine,
+            "blocked_ips",
+            []
+        )
 
 
     # ========================================================
