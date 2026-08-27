@@ -15,11 +15,13 @@ class PortScanDetector:
         self.threshold = threshold
         self.window = timedelta(seconds=window_seconds)
         self.activity = defaultdict(list)
+        self.last_alert_at = {}
 
     def process_packet(self, packet):
         source_ip = packet.get("source_ip")
         destination_port = packet.get("destination_port")
         protocol = packet.get("protocol")
+        tcp_flags = packet.get("tcp_flags")
 
         # Ignore packets without an IP or destination port.
         if not source_ip:
@@ -31,6 +33,14 @@ class PortScanDetector:
         # Port scanning detection only considers TCP and UDP.
         if protocol not in ("TCP", "UDP"):
             return None
+
+        # For TCP, only a SYN without ACK is a new connection attempt.
+        # Responses and established-session packets must not count as scans.
+        if protocol == "TCP" and tcp_flags is not None:
+            is_syn = bool(tcp_flags & 0x02)
+            is_ack = bool(tcp_flags & 0x10)
+            if not is_syn or is_ack:
+                return None
 
         now = datetime.now()
 
@@ -56,6 +66,16 @@ class PortScanDetector:
 
         # Detect possible port scan.
         if len(unique_ports) >= self.threshold:
+            previous_alert = self.last_alert_at.get(source_ip)
+
+            # A single scan produces many packets after reaching the threshold.
+            # Emit one alert per source per detection window instead of flooding
+            # MongoDB and Socket.IO with duplicates.
+            if previous_alert and now - previous_alert < self.window:
+                return None
+
+            self.last_alert_at[source_ip] = now
+
             return {
                 "type": "PORT_SCAN",
                 "severity": "HIGH",

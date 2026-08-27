@@ -115,6 +115,12 @@ class AlertManager:
         0
     ),
 
+    "attempts": alert.get("attempts", 0),
+
+    "packets_per_second": alert.get("packets_per_second", 0),
+
+    "threshold": alert.get("threshold", 0),
+
     "window_seconds": alert.get(
         "window_seconds",
         0

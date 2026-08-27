@@ -1,0 +1,2 @@
+# Runtime authentication events may contain IP addresses; do not commit them.
+*.jsonl

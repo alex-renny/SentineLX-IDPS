@@ -17,7 +17,7 @@ export function initializeAlertService(io) {
 // ENGINE STATUS
 // ============================================================
 
-export function broadcastEngineStatus(status) {
+export function broadcastEngineStatus(status, details = {}) {
   currentEngineStatus = status;
 
   if (!ioInstance) {
@@ -30,6 +30,7 @@ export function broadcastEngineStatus(status) {
   ioInstance.emit("ENGINE_STATUS", {
     status,
     timestamp: new Date().toISOString(),
+    ...details,
   });
 
   console.log(`📡 Engine status broadcast: ${status}`);
@@ -65,6 +66,16 @@ export async function broadcastAlert(alert) {
       ports_detected: alert.ports_detected || 0,
 
       window_seconds: alert.window_seconds || 0,
+
+      attempts: alert.attempts || 0,
+
+      packets_per_second: alert.packets_per_second || 0,
+
+      threshold: alert.threshold || 0,
+
+      target: alert.target || null,
+
+      service: alert.service || null,
 
       message:
         alert.message ||

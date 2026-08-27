@@ -54,8 +54,16 @@ export function startDetectionWorker() {
 
         if (event.type === "SCAN_COMPLETE") {
           console.log(
-            `📡 Network scan: ${event.packet_count} packets, ${event.alert_count} alerts`
+            `📡 Network scan (${event.capture_interface}): ${event.packet_count} packets, ${event.alert_count} alerts`
           );
+
+          broadcastEngineStatus("STARTED", {
+            captureInterface: event.capture_interface,
+            packetCount: event.packet_count,
+            alertCount: event.alert_count,
+            scannedAt: event.timestamp,
+            detectors: event.detectors,
+          });
         }
 
         if (event.type === "SECURITY_ALERT") {
@@ -67,7 +75,8 @@ export function startDetectionWorker() {
         if (event.type === "ENGINE_ERROR") {
           console.error(
             "❌ Detection Engine Error:",
-            event.message
+            event.error || event.message || "Unknown detection engine error",
+            event.component ? `(${event.component})` : ""
           );
         }
       } catch (error) {

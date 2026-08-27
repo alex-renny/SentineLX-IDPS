@@ -22,6 +22,8 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [alerts, setAlerts] = useState([]);
   const [engineStatus, setEngineStatus] = useState("Connecting");
+  const [captureStatus, setCaptureStatus] = useState(null);
+  const [detectorStatus, setDetectorStatus] = useState(null);
   const engineOnline = engineStatus === "Online" && !error;
 
   const fetchSystemStats = async () => {
@@ -80,6 +82,19 @@ export default function Dashboard() {
 
     if (data.status === "STOPPED") {
       setEngineStatus("Offline");
+    }
+
+    if (data.captureInterface) {
+      setCaptureStatus({
+        interface: data.captureInterface,
+        packetCount: data.packetCount ?? 0,
+        alertCount: data.alertCount ?? 0,
+        scannedAt: data.scannedAt || data.timestamp,
+      });
+    }
+
+    if (data.detectors) {
+      setDetectorStatus(data.detectors);
     }
   };
 
@@ -352,6 +367,16 @@ export default function Dashboard() {
 
             <SecurityStatus
               icon={LockKeyhole}
+              title="Brute-force Monitor"
+              status={
+                detectorStatus
+                  ? `${detectorStatus.brute_force.threshold} failures / ${detectorStatus.brute_force.window_seconds}s`
+                  : "Waiting for engine"
+              }
+            />
+
+            <SecurityStatus
+              icon={LockKeyhole}
               title="Firewall"
               status="Protected"
             />
@@ -359,7 +384,21 @@ export default function Dashboard() {
             <SecurityStatus
               icon={Wifi}
               title="Network Monitor"
-              status="Ready"
+              status={
+                captureStatus
+                  ? `${captureStatus.packetCount} packets captured`
+                  : "Waiting for capture"
+              }
+            />
+
+            <SecurityStatus
+              icon={Activity}
+              title="Traffic Flood Monitor"
+              status={
+                detectorStatus
+                  ? `${detectorStatus.ddos.threshold} packets/s`
+                  : "Waiting for engine"
+              }
             />
 
             <SecurityStatus
@@ -368,6 +407,20 @@ export default function Dashboard() {
               status="Standby"
             />
           </div>
+
+          {captureStatus && (
+            <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3 text-xs">
+              <p className="font-medium text-cyan-300">
+                Capturing on {captureStatus.interface}
+              </p>
+              <p className="mt-1 text-slate-400">
+                Last scan: {captureStatus.packetCount} packets, {captureStatus.alertCount} alerts
+                {captureStatus.scannedAt
+                  ? ` · ${new Date(captureStatus.scannedAt).toLocaleTimeString()}`
+                  : ""}
+              </p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -465,6 +518,24 @@ export default function Dashboard() {
                     {alert.window_seconds && (
                       <span className="rounded-lg border border-purple-500/10 bg-purple-500/5 px-3 py-1.5 text-[11px] text-purple-400">
                         ⏱️ {alert.window_seconds}s detection window
+                      </span>
+                    )}
+
+                    {alert.attempts > 0 && (
+                      <span className="rounded-lg border border-yellow-500/10 bg-yellow-500/5 px-3 py-1.5 text-[11px] text-yellow-300">
+                        🔐 {alert.attempts} failed {alert.service || "login"} attempts
+                      </span>
+                    )}
+
+                    {alert.packets_per_second > 0 && (
+                      <span className="rounded-lg border border-red-500/10 bg-red-500/5 px-3 py-1.5 text-[11px] text-red-300">
+                        🌊 {alert.packets_per_second} packets/s (limit {alert.threshold})
+                      </span>
+                    )}
+
+                    {alert.target && (
+                      <span className="rounded-lg border border-cyan-500/10 bg-cyan-500/5 px-3 py-1.5 text-[11px] text-cyan-300">
+                        Target: {alert.target}
                       </span>
                     )}
 

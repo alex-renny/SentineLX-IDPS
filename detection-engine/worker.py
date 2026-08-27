@@ -5,6 +5,8 @@ import time
 from datetime import datetime
 
 from network.monitor import capture_traffic
+from detection.brute_force import BruteForceDetector
+from services.auth_event_reader import AuthEventReader
 from services.alert_manager import AlertManager
 
 
@@ -13,6 +15,11 @@ from services.alert_manager import AlertManager
 # ============================================================
 
 alert_manager = AlertManager()
+brute_force_detector = BruteForceDetector(
+    threshold=int(os.getenv("SENTINELX_BRUTE_FORCE_THRESHOLD", "20")),
+    window_seconds=60,
+)
+auth_event_reader = AuthEventReader()
 
 
 # ============================================================
@@ -96,9 +103,17 @@ def run_network_detection():
 
     try:
 
-        packets, detected_alerts = capture_traffic(
+        auth_alerts = []
+        for event in auth_event_reader.read_events():
+            alert = brute_force_detector.process_event(event)
+            if alert:
+                auth_alerts.append(alert)
+
+        packets, packet_alerts, capture_interface = capture_traffic(
             duration=5
         )
+
+        detected_alerts = auth_alerts + packet_alerts
 
         processed_alerts = []
 
@@ -125,6 +140,12 @@ def run_network_detection():
             "timestamp": datetime.now().isoformat(),
             "packet_count": len(packets),
             "alert_count": len(processed_alerts),
+            "capture_interface": capture_interface,
+            "detectors": {
+                "port_scan": {"threshold": 30, "window_seconds": 10},
+                "brute_force": {"threshold": brute_force_detector.threshold, "window_seconds": brute_force_detector.window_seconds},
+                "ddos": {"threshold": int(os.getenv("SENTINELX_DDOS_THRESHOLD", "1000")), "window_seconds": 1},
+            },
             "alerts": processed_alerts
         })
 

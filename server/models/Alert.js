@@ -36,6 +36,31 @@ const alertSchema = new mongoose.Schema(
       default: 0,
     },
 
+    attempts: {
+      type: Number,
+      default: 0,
+    },
+
+    packets_per_second: {
+      type: Number,
+      default: 0,
+    },
+
+    threshold: {
+      type: Number,
+      default: 0,
+    },
+
+    target: {
+      type: String,
+      default: null,
+    },
+
+    service: {
+      type: String,
+      default: null,
+    },
+
     message: {
       type: String,
       required: true,

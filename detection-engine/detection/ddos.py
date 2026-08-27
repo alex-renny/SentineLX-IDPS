@@ -15,8 +15,7 @@ class DDoSDetector:
         # source_ip -> packet timestamps
         self.packet_history = defaultdict(deque)
 
-        # Prevent repeated alerts
-        self.alerted_sources = set()
+        self.last_alert_at = {}
 
     def process_packet(self, packet):
 
@@ -47,10 +46,15 @@ class DDoSDetector:
 
         if (
             packet_count >= self.threshold
-            and source_ip not in self.alerted_sources
         ):
+            previous_alert = self.last_alert_at.get(source_ip)
 
-            self.alerted_sources.add(source_ip)
+            if previous_alert and timestamp - previous_alert < timedelta(
+                seconds=self.window_seconds
+            ):
+                return None
+
+            self.last_alert_at[source_ip] = timestamp
 
             return {
                 "type": "DDOS",
@@ -77,9 +81,7 @@ class DDoSDetector:
             None
         )
 
-        self.alerted_sources.discard(
-            source_ip
-        )
+        self.last_alert_at.pop(source_ip, None)
 
     def _parse_timestamp(self, timestamp):
 
