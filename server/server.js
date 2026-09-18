@@ -11,6 +11,7 @@ import systemRoutes from "./routes/systemRoutes.js";
 import networkRoutes from "./routes/networkRoutes.js";
 import detectionRoutes from "./routes/detectionRoutes.js";
 import alertRoutes from "./routes/alertRoutes.js";
+import reportRoutes from "./routes/reportRoutes.js";
 
 import connectDB from "./config/db.js";
 import { initializeAlertService ,getEngineStatus,} from "./services/alertService.js";
@@ -54,6 +55,7 @@ app.use("/api/system", systemRoutes);
 app.use("/api/network", networkRoutes);
 app.use("/api/detection", detectionRoutes);
 app.use("/api/alerts", alertRoutes);
+app.use("/api/reports", reportRoutes);
 
 /* ============================================================
    ROOT
