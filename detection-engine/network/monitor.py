@@ -31,8 +31,8 @@ from detection.port_scan import PortScanDetector
 # ---------------------------------------------------------
 
 detector = PortScanDetector(
-    threshold=30,
-    window_seconds=10
+    threshold=int(os.getenv("SENTINELX_PORT_SCAN_THRESHOLD", "30")),
+    window_seconds=int(os.getenv("SENTINELX_PORT_SCAN_WINDOW", "10"))
 )
 
 ddos_detector = DDoSDetector(
@@ -178,7 +178,13 @@ def capture_traffic(duration=5):
 
         packets.append(packet_data)
 
-        for active_detector in (detector, ddos_detector):
+        active_detectors = []
+        if os.getenv("SENTINELX_PORT_SCAN_ENABLED", "true").lower() == "true":
+            active_detectors.append(detector)
+        if os.getenv("SENTINELX_DDOS_ENABLED", "true").lower() == "true":
+            active_detectors.append(ddos_detector)
+
+        for active_detector in active_detectors:
             alert = active_detector.process_packet(packet_data)
 
             if alert:
@@ -188,7 +194,7 @@ def capture_traffic(duration=5):
                     for existing in alerts
                 )
 
-                if not duplicate:
+                if (alert.get("type") != "ABNORMAL_TRAFFIC" or os.getenv("SENTINELX_ABNORMAL_TRAFFIC_ENABLED", "true").lower() == "true") and not duplicate:
                     alerts.append(alert)
 
     sniff(

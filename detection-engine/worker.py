@@ -18,7 +18,7 @@ from prevention.prevention_engine import PreventionEngine
 alert_manager = AlertManager()
 brute_force_detector = BruteForceDetector(
     threshold=int(os.getenv("SENTINELX_BRUTE_FORCE_THRESHOLD", "20")),
-    window_seconds=60,
+    window_seconds=int(os.getenv("SENTINELX_BRUTE_FORCE_WINDOW", "60")),
 )
 auth_event_reader = AuthEventReader()
 
@@ -107,13 +107,14 @@ def run_network_detection():
         scan_started_at = time.time()
 
         auth_alerts = []
-        for event in auth_event_reader.read_events():
-            alert = brute_force_detector.process_event(event)
-            if alert:
-                auth_alerts.append(alert)
+        if os.getenv("SENTINELX_BRUTE_FORCE_ENABLED", "true").lower() == "true":
+            for event in auth_event_reader.read_events():
+                alert = brute_force_detector.process_event(event)
+                if alert:
+                    auth_alerts.append(alert)
 
         packets, packet_alerts, capture_interface, local_ip = capture_traffic(
-            duration=5
+            duration=int(os.getenv("SENTINELX_CAPTURE_DURATION", "5"))
         )
 
         detected_alerts = auth_alerts + packet_alerts
@@ -149,7 +150,7 @@ def run_network_detection():
             # Keep the Socket.IO telemetry payload bounded on busy interfaces.
             "packets": packets[-100:],
             "detectors": {
-                "port_scan": {"threshold": 30, "window_seconds": 10},
+                "port_scan": {"threshold": int(os.getenv("SENTINELX_PORT_SCAN_THRESHOLD", "30")), "window_seconds": int(os.getenv("SENTINELX_PORT_SCAN_WINDOW", "10"))},
                 "brute_force": {"threshold": brute_force_detector.threshold, "window_seconds": brute_force_detector.window_seconds},
                 "ddos": {
                     "burst_threshold": ddos_detector.threshold,
@@ -220,7 +221,7 @@ def main():
 
         run_network_detection()
 
-        time.sleep(1)
+        time.sleep(int(os.getenv("SENTINELX_CAPTURE_INTERVAL", "1")))
 
 
 # ============================================================

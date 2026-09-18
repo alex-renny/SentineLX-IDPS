@@ -12,6 +12,8 @@ import networkRoutes from "./routes/networkRoutes.js";
 import detectionRoutes from "./routes/detectionRoutes.js";
 import alertRoutes from "./routes/alertRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
+import settingsRoutes from "./routes/settingsRoutes.js";
+import { applyRuntimeSettings, getSettings } from "./services/settingsService.js";
 
 import connectDB from "./config/db.js";
 import { initializeAlertService ,getEngineStatus,} from "./services/alertService.js";
@@ -29,7 +31,14 @@ const app = express();
    DATABASE
    ============================================================ */
 
-connectDB();
+connectDB().then(async () => {
+  try {
+    applyRuntimeSettings(await getSettings());
+  } catch (error) {
+    console.warn("Using default runtime settings:", error.message);
+  }
+  startDetectionWorker();
+});
 
 /* ============================================================
    MIDDLEWARE
@@ -56,6 +65,7 @@ app.use("/api/network", networkRoutes);
 app.use("/api/detection", detectionRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/reports", reportRoutes);
+app.use("/api/settings", settingsRoutes);
 
 /* ============================================================
    ROOT
@@ -121,7 +131,6 @@ server.listen(PORT, () => {
   console.log(`🚀 SentinelX Server Running on Port ${PORT}`);
   console.log(`🔌 Socket.IO Ready`);
 
-  startDetectionWorker();
 });
 
 /* ============================================================

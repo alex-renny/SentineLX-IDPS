@@ -1,154 +1,42 @@
 import { useEffect, useState } from "react";
+import { AlertTriangle, Check, Save, Settings as SettingsIcon } from "lucide-react";
 import Layout from "../components/layout/Layout";
 import api from "../services/api";
 
+const Toggle = ({ checked, onChange, label, description }) => <label className="flex cursor-pointer items-start justify-between gap-4 rounded-xl border border-slate-800 bg-slate-950/50 p-4"><span><span className="block text-sm font-medium text-slate-200">{label}</span>{description && <span className="mt-1 block text-xs text-slate-500">{description}</span>}</span><input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="mt-1 h-4 w-4 accent-cyan-400" /></label>;
+const Field = ({ label, value, onChange, suffix }) => <label className="block text-xs font-medium uppercase tracking-wider text-slate-500">{label}<div className="mt-2 flex rounded-xl border border-slate-700 bg-slate-950 focus-within:border-cyan-500"><input type="number" min="0" value={value} onChange={(event) => onChange(Number(event.target.value))} className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-white outline-none" />{suffix && <span className="flex items-center border-l border-slate-700 px-3 text-xs text-slate-500">{suffix}</span>}</div></label>;
+
 export default function Settings() {
-  const [prevention, setPrevention] = useState(null);
-  const [busyIp, setBusyIp] = useState("");
-
-  const load = async () => {
-    try {
-      const response = await api.get("/alerts/prevention");
-      if (response.data.success) {
-        setPrevention(response.data.prevention);
-      }
-    } catch (error) {
-      console.error("Prevention settings error:", error);
+  const [settings, setSettings] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const patch = (section, key, value) => setSettings((current) => ({ ...current, [section]: { ...current[section], [key]: value } }));
+  useEffect(() => { const load = async () => { try { const response = await api.get("/settings"); if (response.data.success) setSettings(response.data.settings); } catch { setError("Unable to load configuration."); } }; const timer = window.setTimeout(load, 0); return () => window.clearTimeout(timer); }, []);
+  const save = async () => {
+    setError(""); setMessage("");
+    let enforcementConfirmation;
+    if (settings.prevention.mode === "active") {
+      const accepted = window.confirm("Enforcement mode can create real Windows Firewall rules when you choose Block IP. Continue?");
+      if (!accepted) return;
+      enforcementConfirmation = "ENABLE_ENFORCEMENT";
     }
+    try { setSaving(true); const response = await api.put("/settings", { ...settings, enforcementConfirmation }); setSettings(response.data.settings); setMessage(response.data.message); }
+    catch (requestError) { setError(requestError.response?.data?.message || "Unable to save configuration."); }
+    finally { setSaving(false); }
   };
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  const unblock = async (ip) => {
-    const confirmed = window.confirm(
-      `Remove SentinelX firewall rule for ${ip}?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      setBusyIp(ip);
-      const response = await api.post(
-        "/alerts/prevention/unblock",
-        { ip },
-        { timeout: 30000 }
-      );
-
-      if (!response.data.success) {
-        window.alert(
-          response.data.prevention?.error ||
-            "Unable to remove this firewall rule"
-        );
-      }
-
-      await load();
-    } catch (error) {
-      window.alert(
-        error.response?.data?.message || "Unable to remove this firewall rule"
-      );
-    } finally {
-      setBusyIp("");
-    }
-  };
-
-  return (
-    <Layout>
-      <section className="mb-6">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">
-          Platform
-        </p>
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-      </section>
-
-      <div className="max-w-2xl rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-        <h2 className="font-semibold text-white">Prevention engine</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Real Windows Firewall blocking stays off until you opt in. Test
-          mode only records <span className="font-mono">BLOCK_SIMULATED</span>.
-          Active mode still waits for Block IP confirmation unless auto-block
-          is enabled.
-        </p>
-
-        <div className="mt-5 rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-          <p className="text-xs uppercase tracking-wider text-slate-500">
-            Current mode
-          </p>
-          <p className="mt-2 text-lg font-semibold text-cyan-400">
-            {prevention?.mode || "Loading..."}
-          </p>
-          <p className="mt-2 text-sm text-slate-400">
-            {prevention?.warning}
-          </p>
-          <p className="mt-3 font-mono text-xs text-slate-500">
-            Rule prefix: {prevention?.rule_prefix || "SentinelX-IDPS-BLOCK"}
-          </p>
-          <p className="mt-1 font-mono text-xs text-slate-500">
-            Auto-block: {prevention?.auto_block ? "enabled" : "disabled"}
-          </p>
-        </div>
-
-        <div className="mt-5 text-sm leading-6 text-slate-400">
-          <p>To enable real blocking:</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Run the server as Administrator</li>
-            <li>
-              Set <span className="font-mono">SENTINELX_PREVENTION_MODE=active</span> in{" "}
-              <span className="font-mono">server/.env</span>
-            </li>
-            <li>
-              Leave <span className="font-mono">SENTINELX_PREVENTION_AUTO_BLOCK=false</span>{" "}
-              so only confirmed dashboard blocks create rules
-            </li>
-            <li>Restart the Node server so the detection worker inherits the mode</li>
-          </ol>
-        </div>
-      </div>
-
-      <div className="mt-6 max-w-2xl rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-        <h2 className="font-semibold text-white">SentinelX firewall rules</h2>
-        <p className="mt-2 text-sm text-slate-500">
-          Only rules named like{" "}
-          <span className="font-mono">SentinelX-IDPS-BLOCK-192_168_1_100</span>{" "}
-          are listed. Test mode will not create these.
-        </p>
-
-        <div className="mt-5 space-y-3">
-          {(prevention?.rules || []).length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No SentinelX firewall rules are present.
-            </p>
-          ) : (
-            prevention.rules.map((rule) => (
-              <div
-                key={rule.name}
-                className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/50 p-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div>
-                  <p className="font-mono text-xs text-cyan-400">{rule.name}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {rule.remote_ip || "Unknown IP"}
-                    {rule.direction ? ` · ${rule.direction}` : ""}
-                    {rule.enabled ? ` · ${rule.enabled}` : ""}
-                  </p>
-                </div>
-                {rule.remote_ip && (
-                  <button
-                    disabled={busyIp === rule.remote_ip}
-                    onClick={() => unblock(rule.remote_ip)}
-                    className="rounded-lg border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-300 hover:bg-cyan-500/20 disabled:opacity-50"
-                  >
-                    {busyIp === rule.remote_ip ? "Removing..." : "Remove rule"}
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </Layout>
-  );
+  if (!settings) return <Layout><div className="flex h-64 items-center justify-center text-sm text-slate-500">Loading settings...</div></Layout>;
+  return <Layout>
+    <section className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Platform configuration</p><h1 className="text-2xl font-bold text-white sm:text-3xl">Settings</h1><p className="mt-2 text-sm text-slate-500">Changes are validated, saved centrally, and applied by restarting the detection engine.</p></div><button onClick={save} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-3 text-sm font-semibold text-slate-950 hover:bg-cyan-400 disabled:opacity-60"><Save size={17} />{saving ? "Saving..." : "Save configuration"}</button></section>
+    {error && <Notice color="rose" text={error} />}{message && <Notice color="emerald" text={message} />}
+    <div className="grid gap-6 xl:grid-cols-2">
+      <Panel title="Detection modules" icon={SettingsIcon} description="Choose which event streams the detection engine evaluates."><div className="space-y-3"><Toggle checked={settings.detectors.portScan} onChange={(value) => patch("detectors", "portScan", value)} label="Port Scan Detection" /><Toggle checked={settings.detectors.bruteForce} onChange={(value) => patch("detectors", "bruteForce", value)} label="Brute Force Detection" /><Toggle checked={settings.detectors.ddos} onChange={(value) => patch("detectors", "ddos", value)} label="DDoS Detection" /><Toggle checked={settings.detectors.abnormalTraffic} onChange={(value) => patch("detectors", "abnormalTraffic", value)} label="Abnormal Traffic Detection" /></div></Panel>
+      <Panel title="Prevention mode" icon={AlertTriangle} description="Test mode records BLOCK_SIMULATED only. Enforcement requires an explicit confirmation each time you save."><div className="space-y-3"><label className={`block cursor-pointer rounded-xl border p-4 ${settings.prevention.mode === "test" ? "border-cyan-500/50 bg-cyan-500/5" : "border-slate-800 bg-slate-950/50"}`}><input className="mr-2 accent-cyan-400" type="radio" checked={settings.prevention.mode === "test"} onChange={() => patch("prevention", "mode", "test")} /> <span className="text-sm font-medium text-white">Test Mode</span><p className="mt-2 text-xs text-slate-500">No firewall rules are changed; blocks are simulated.</p></label><label className={`block cursor-pointer rounded-xl border p-4 ${settings.prevention.mode === "active" ? "border-amber-500/50 bg-amber-500/5" : "border-slate-800 bg-slate-950/50"}`}><input className="mr-2 accent-amber-400" type="radio" checked={settings.prevention.mode === "active"} onChange={() => patch("prevention", "mode", "active")} /> <span className="text-sm font-medium text-white">Enforcement Mode</span><p className="mt-2 text-xs text-amber-300">Requires Administrator privileges. Manual Block IP can create Windows Firewall rules.</p></label><Toggle checked={settings.prevention.autoBlock} onChange={(value) => patch("prevention", "autoBlock", value)} label="Automatic blocking" description="Only applies in enforcement mode. Keep off for analyst confirmation." /></div></Panel>
+      <Panel title="Detection thresholds" icon={SettingsIcon} description="Values must be positive. DDoS peak and sustained thresholds cannot be below its observation threshold."><div className="grid grid-cols-2 gap-4"><Field label="Port scan ports" value={settings.thresholds.portScanPorts} suffix="ports" onChange={(value) => patch("thresholds", "portScanPorts", value)} /><Field label="Port scan window" value={settings.thresholds.portScanWindow} suffix="seconds" onChange={(value) => patch("thresholds", "portScanWindow", value)} /><Field label="Brute force attempts" value={settings.thresholds.bruteForceAttempts} suffix="attempts" onChange={(value) => patch("thresholds", "bruteForceAttempts", value)} /><Field label="Brute force window" value={settings.thresholds.bruteForceWindow} suffix="seconds" onChange={(value) => patch("thresholds", "bruteForceWindow", value)} /><Field label="DDoS observation" value={settings.thresholds.ddosThreshold} suffix="packets/s" onChange={(value) => patch("thresholds", "ddosThreshold", value)} /><Field label="DDoS peak" value={settings.thresholds.ddosPeakThreshold} suffix="packets/s" onChange={(value) => patch("thresholds", "ddosPeakThreshold", value)} /><Field label="DDoS sustained" value={settings.thresholds.ddosSustainedThreshold} suffix="packets/s" onChange={(value) => patch("thresholds", "ddosSustainedThreshold", value)} /><Field label="Validation window" value={settings.thresholds.ddosValidationWindow} suffix="seconds" onChange={(value) => patch("thresholds", "ddosValidationWindow", value)} /></div></Panel>
+      <Panel title="Network capture" icon={SettingsIcon} description="Leave interface empty to let Scapy select its default adapter."><div className="grid grid-cols-1 gap-4 sm:grid-cols-2"><label className="block text-xs font-medium uppercase tracking-wider text-slate-500 sm:col-span-2">Network interface<input value={settings.network.captureInterface} onChange={(event) => patch("network", "captureInterface", event.target.value)} placeholder="Automatic" className="mt-2 block w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none focus:border-cyan-500" /></label><Field label="Capture duration" value={settings.network.captureDuration} suffix="seconds" onChange={(value) => patch("network", "captureDuration", value)} /><Field label="Capture interval" value={settings.network.captureInterval} suffix="seconds" onChange={(value) => patch("network", "captureInterval", value)} /></div></Panel>
+      <Panel title="Alert delivery and retention" icon={SettingsIcon} description="Control the alert pipeline without changing detector behavior."><div className="space-y-3"><Toggle checked={settings.alerts.liveAlerts} onChange={(value) => patch("alerts", "liveAlerts", value)} label="Enable live alerts" /><Toggle checked={settings.alerts.saveToDatabase} onChange={(value) => patch("alerts", "saveToDatabase", value)} label="Save alerts to MongoDB" /><Toggle checked={settings.alerts.socketNotifications} onChange={(value) => patch("alerts", "socketNotifications", value)} label="Socket.IO notifications" /><Field label="Maximum stored alerts" value={settings.alerts.maximumStoredAlerts} suffix="alerts" onChange={(value) => patch("alerts", "maximumStoredAlerts", value)} /></div></Panel>
+    </div>
+  </Layout>;
 }
+function Panel({ title, icon: Icon, description, children }) { return <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5"><div className="mb-5 flex gap-3"><div className="rounded-lg bg-cyan-500/10 p-2 text-cyan-400"><Icon size={18} /></div><div><h2 className="font-semibold text-white">{title}</h2><p className="mt-1 text-xs text-slate-500">{description}</p></div></div>{children}</section>; }
+function Notice({ color, text }) { return <div className={`mb-6 flex items-center gap-2 rounded-xl border p-4 text-sm ${color === "rose" ? "border-rose-500/30 bg-rose-500/10 text-rose-300" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"}`}><Check size={17} />{text}</div>; }

@@ -67,6 +67,9 @@ function buildTimeline(alert) {
 
 export async function broadcastAlert(alert) {
   try {
+    if (String(process.env.SENTINELX_ALERTS_ENABLED || "true").toLowerCase() !== "true") {
+      return null;
+    }
     if (!alert) {
       console.warn("⚠️ Empty security alert received");
       return null;
@@ -117,13 +120,20 @@ export async function broadcastAlert(alert) {
       ? alert.timeline
       : buildTimeline(payload);
 
-    const savedAlert = await Alert.create(payload);
+    const saveAlerts = String(process.env.SENTINELX_ALERT_SAVE || "true").toLowerCase() === "true";
+    const savedAlert = saveAlerts ? await Alert.create(payload) : { toObject: () => payload, ...payload };
+
+    if (saveAlerts) {
+      const maximum = Number(process.env.SENTINELX_ALERT_MAX_STORED || 5000);
+      const overflow = await Alert.find().sort({ detected_at: -1 }).skip(maximum).select("_id").lean();
+      if (overflow.length) await Alert.deleteMany({ _id: { $in: overflow.map((item) => item._id) } });
+    }
 
     console.log(
       `🚨 Alert saved: ${savedAlert.type} | ${savedAlert.severity} | ${savedAlert.status}`
     );
 
-    if (ioInstance) {
+    if (ioInstance && String(process.env.SENTINELX_SOCKET_NOTIFICATIONS || "true").toLowerCase() === "true") {
       const dashboardAlert = {
         ...savedAlert.toObject(),
         received_at: new Date().toISOString(),

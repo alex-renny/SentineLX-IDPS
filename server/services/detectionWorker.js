@@ -162,3 +162,8 @@ export function stopDetectionWorker() {
 
   broadcastEngineStatus("STOPPED");
 }
+
+export function restartDetectionWorker() {
+  stopDetectionWorker();
+  setTimeout(startDetectionWorker, 250);
+}
