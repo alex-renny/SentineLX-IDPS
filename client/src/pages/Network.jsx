@@ -1,26 +1,54 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Activity, AlertTriangle, Radio, Server, Wifi } from "lucide-react";
+import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import Layout from "../components/layout/Layout";
-import TrafficOverview from "../components/network/TrafficOverview";
 import api from "../services/api";
 import socket from "../services/socket";
+
+const COLORS = ["#22d3ee", "#a78bfa", "#f59e0b", "#34d399", "#fb7185"];
+const bytes = (value = 0) => value < 1024 ? `${value} B` : `${(value / 1024).toFixed(1)} KB`;
+const group = (packets, field, label) => Object.entries(packets.reduce((all, packet) => { const value = packet[field] ?? "Unknown"; all[value] = (all[value] || 0) + 1; return all; }, {})).map(([name, count]) => ({ [label]: name, count })).sort((a, b) => b.count - a.count);
 
 export default function Network() {
   const [traffic, setTraffic] = useState(null);
   const [history, setHistory] = useState([]);
-
+  const [alerts, setAlerts] = useState([]);
+  const [error, setError] = useState("");
+  const apply = (next) => {
+    setTraffic(next);
+    const rate = next.duration ? Math.round((next.packet_count || 0) / next.duration) : 0;
+    const volume = (next.packets || []).reduce((sum, packet) => sum + (Number(packet.packet_size) || 0), 0);
+    setHistory((previous) => [...previous, { time: new Date(next.timestamp || new Date()).toLocaleTimeString(), packets: rate, bytes: volume }].slice(-24));
+  };
   useEffect(() => {
-    const applyTraffic = (nextTraffic) => {
-      setTraffic(nextTraffic);
-      const packets = nextTraffic.duration
-        ? Math.round((nextTraffic.packet_count || 0) / nextTraffic.duration)
-        : 0;
-      const bytes = (nextTraffic.packets || []).reduce((sum, item) => sum + (Number(item.packet_size) || 0), 0);
-      setHistory((previous) => [...previous, { time: new Date(nextTraffic.timestamp || Date.now()).toLocaleTimeString(), packets, bytes }].slice(-12));
-    };
-    api.get("/network/traffic").then((response) => response.data.success && applyTraffic(response.data)).catch(console.error);
-    socket.on("NETWORK_TRAFFIC", applyTraffic);
-    return () => socket.off("NETWORK_TRAFFIC", applyTraffic);
+    const load = async () => { try { const [network, threatData] = await Promise.all([api.get("/network/traffic"), api.get("/alerts?limit=100")]); if (network.data.success) apply(network.data); if (threatData.data.success) setAlerts(threatData.data.alerts || []); setError(""); } catch { setError("Unable to load live network telemetry."); } };
+    const first = window.setTimeout(load, 0); const interval = window.setInterval(load, 15000);
+    socket.on("NETWORK_TRAFFIC", apply);
+    return () => { window.clearTimeout(first); window.clearInterval(interval); socket.off("NETWORK_TRAFFIC", apply); };
   }, []);
 
-  return <Layout><section><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Network visibility</p><h1 className="text-2xl font-bold text-white sm:text-3xl">Network Monitor</h1><p className="mt-2 text-sm text-slate-500">Live packet telemetry from the detection engine.</p></section><TrafficOverview traffic={traffic} history={history} /></Layout>;
+  const packets = traffic?.packets || [];
+  const protocols = useMemo(() => group(packets, "protocol", "protocol"), [packets]);
+  const sources = useMemo(() => group(packets, "source_ip", "source").slice(0, 6), [packets]);
+  const ports = useMemo(() => group(packets, "destination_port", "port").slice(0, 6), [packets]);
+  const volume = packets.reduce((sum, packet) => sum + (Number(packet.packet_size) || 0), 0);
+  const rate = traffic?.duration ? Math.round((traffic.packet_count || 0) / traffic.duration) : 0;
+  const suspiciousSources = new Map(alerts.filter((alert) => alert.source_ip && alert.status !== "RESOLVED").map((alert) => [alert.source_ip, alert]));
+  const suspicious = packets.filter((packet) => suspiciousSources.has(packet.source_ip)).slice(-4).reverse();
+  return <Layout>
+    <section className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Network visibility</p><h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">Network Monitor</h1><p className="mt-2 text-sm text-slate-500">Observe the packets currently being captured by the SentinelX detection engine.</p></div><div className={`inline-flex items-center gap-2 self-start rounded-xl border px-4 py-2.5 text-xs font-semibold sm:self-auto ${traffic?.capture_status === "LIVE" ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400" : "border-yellow-500/20 bg-yellow-500/5 text-yellow-400"}`}><span className={`h-2.5 w-2.5 rounded-full ${traffic?.capture_status === "LIVE" ? "animate-pulse bg-emerald-400" : "bg-yellow-400"}`} />{traffic?.capture_status === "LIVE" ? "CAPTURE LIVE" : "WAITING FOR CAPTURE"}</div></section>
+    {error && <div className="mb-6 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">{error}</div>}
+    <section className="grid grid-cols-2 gap-4 xl:grid-cols-4"><Metric icon={Wifi} title="Capture interface" value={traffic?.capture_interface || "Waiting"} detail={traffic?.local_ip ? `Local IP: ${traffic.local_ip}` : "Awaiting adapter details"} /><Metric icon={Activity} title="Packets / sec" value={rate} detail={`${traffic?.packet_count || 0} in latest scan`} /><Metric icon={Radio} title="Traffic volume" value={bytes(volume)} detail={`${packets.length} sampled packets`} /><Metric icon={Server} title="Detection events" value={traffic?.alert_count || 0} detail={traffic?.timestamp ? `Updated ${new Date(traffic.timestamp).toLocaleTimeString()}` : "Awaiting scan"} /></section>
+    <section className="mt-6 grid gap-6 xl:grid-cols-3"><Panel title="Network traffic" subtitle="Packets per second over time" className="xl:col-span-2"><ResponsiveContainer width="100%" height={255}><AreaChart data={history}><defs><linearGradient id="packetFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22d3ee" stopOpacity={0.35} /><stop offset="100%" stopColor="#22d3ee" stopOpacity={0} /></linearGradient></defs><XAxis dataKey="time" tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis tick={{ fill: "#64748b", fontSize: 11 }} axisLine={false} tickLine={false} width={32} /><Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 10 }} /><Area type="monotone" dataKey="packets" stroke="#22d3ee" fill="url(#packetFill)" strokeWidth={2} /></AreaChart></ResponsiveContainer></Panel><Panel title="Protocol distribution" subtitle="Latest packet sample"><ResponsiveContainer width="100%" height={255}><PieChart><Pie data={protocols} dataKey="count" nameKey="protocol" innerRadius={52} outerRadius={86} paddingAngle={3} label={({ protocol, percent }) => `${protocol} ${(percent * 100).toFixed(0)}%`}>{protocols.map((item, index) => <Cell key={item.protocol} fill={COLORS[index % COLORS.length]} />)}</Pie><Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 10 }} /></PieChart></ResponsiveContainer></Panel></section>
+    <section className="mt-6 grid gap-6 xl:grid-cols-2"><Panel title="Top source IPs" subtitle="Most active sources in the latest capture"><Ranking rows={sources} label="source" /></Panel><Panel title="Destination ports" subtitle="Most frequently targeted ports"><Ranking rows={ports} label="port" orange /></Panel></section>
+    <section className="mt-6"><Panel title="Live packets" subtitle="Most recent captured IP traffic"><PacketTable packets={packets} suspicious={suspiciousSources} /></Panel></section>
+    <section className="mt-6"><Panel title="Suspicious traffic" subtitle="Packet sources associated with unresolved SentinelX alerts"><Suspicious packets={suspicious} alerts={suspiciousSources} /></Panel></section>
+  </Layout>;
 }
+function Metric({ icon: Icon, title, value, detail }) { return <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4"><div className="flex items-center justify-between"><p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</p><Icon size={17} className="text-cyan-400" /></div><p className="mt-3 truncate text-xl font-bold text-white">{value}</p><p className="mt-1 truncate text-xs text-slate-500">{detail}</p></div>; }
+function Panel({ title, subtitle, className = "", children }) { return <div className={`rounded-2xl border border-slate-800 bg-slate-900/60 p-5 ${className}`}><div className="mb-5"><h2 className="font-semibold text-white">{title}</h2><p className="mt-1 text-xs text-slate-500">{subtitle}</p></div>{children}</div>; }
+function Ranking({ rows, label, orange }) { const peak = Math.max(...rows.map((row) => row.count), 1); return rows.length ? <div className="space-y-4">{rows.map((row) => <div key={row[label]}><div className="mb-1.5 flex justify-between text-sm"><span className="font-mono text-slate-300">{row[label]}</span><span className="text-slate-500">{row.count} packets</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${orange ? "bg-orange-400" : "bg-cyan-400"}`} style={{ width: `${row.count / peak * 100}%` }} /></div></div>)}</div> : <Empty text="Waiting for network packets..." />; }
+function PacketTable({ packets, suspicious }) { if (!packets.length) return <Empty text="Waiting for the first network capture..." />; return <div className="max-h-[420px] overflow-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="sticky top-0 bg-slate-900 text-xs uppercase tracking-wider text-slate-500"><tr><th className="pb-3">Source</th><th className="pb-3">Destination</th><th className="pb-3">Protocol</th><th className="pb-3">Source port</th><th className="pb-3">Destination port</th><th className="pb-3">Size</th><th className="pb-3">Timestamp</th></tr></thead><tbody>{packets.slice().reverse().map((packet, index) => <tr key={`${packet.timestamp}-${index}`} className={`border-t border-slate-800 ${suspicious.has(packet.source_ip) ? "bg-amber-500/5" : ""}`}><td className="py-3 font-mono text-cyan-300">{packet.source_ip}</td><td className="py-3 font-mono text-slate-300">{packet.destination_ip}</td><td className="py-3 text-slate-300">{packet.protocol}</td><td className="py-3 text-slate-400">{packet.source_port ?? "-"}</td><td className="py-3 text-slate-400">{packet.destination_port ?? "-"}</td><td className="py-3 text-slate-400">{bytes(packet.packet_size)}</td><td className="py-3 text-slate-500">{packet.timestamp ? new Date(packet.timestamp).toLocaleTimeString() : "-"}</td></tr>)}</tbody></table></div>; }
+function Suspicious({ packets, alerts }) { return packets.length ? <div className="grid gap-3 lg:grid-cols-2">{packets.map((packet, index) => { const alert = alerts.get(packet.source_ip); return <div key={`${packet.timestamp}-${index}`} className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4"><div className="flex items-center gap-2 text-sm font-semibold text-amber-300"><AlertTriangle size={17} />Suspicious connection</div><div className="mt-3 grid grid-cols-2 gap-3 text-xs"><Detail label="Source" value={packet.source_ip} /><Detail label="Protocol / port" value={`${packet.protocol} / ${packet.destination_port ?? "-"}`} /><Detail label="Reason" value={(alert?.type || "ABNORMAL_TRAFFIC").replaceAll("_", " ")} /><Detail label="Severity" value={alert?.severity || "MEDIUM"} /></div></div>; })}</div> : <Empty text="No captured packet sources are associated with active alerts." />; }
+function Detail({ label, value }) { return <div><p className="uppercase tracking-wider text-slate-500">{label}</p><p className="mt-1 truncate font-mono text-slate-200">{value}</p></div>; }
+function Empty({ text }) { return <div className="flex h-36 items-center justify-center rounded-xl border border-dashed border-slate-800 text-sm text-slate-500">{text}</div>; }

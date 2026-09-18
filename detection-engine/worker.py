@@ -104,13 +104,15 @@ def run_network_detection():
 
     try:
 
+        scan_started_at = time.time()
+
         auth_alerts = []
         for event in auth_event_reader.read_events():
             alert = brute_force_detector.process_event(event)
             if alert:
                 auth_alerts.append(alert)
 
-        packets, packet_alerts, capture_interface = capture_traffic(
+        packets, packet_alerts, capture_interface, local_ip = capture_traffic(
             duration=5
         )
 
@@ -142,6 +144,8 @@ def run_network_detection():
             "packet_count": len(packets),
             "alert_count": len(processed_alerts),
             "capture_interface": capture_interface,
+            "local_ip": local_ip,
+            "duration": round(time.time() - scan_started_at, 2),
             # Keep the Socket.IO telemetry payload bounded on busy interfaces.
             "packets": packets[-100:],
             "detectors": {

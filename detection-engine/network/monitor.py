@@ -61,7 +61,12 @@ def resolve_capture_interface():
     configured_interface = os.getenv("SENTINELX_CAPTURE_INTERFACE")
 
     if configured_interface:
-        return configured_interface, configured_interface
+        configured = conf.ifaces.get(configured_interface)
+        return (
+            configured_interface,
+            configured_interface,
+            getattr(configured, "ip", None),
+        )
 
     capture_ip = os.getenv("SENTINELX_CAPTURE_IP")
     default_iface = getattr(conf.iface, "name", str(conf.iface))
@@ -75,6 +80,7 @@ def resolve_capture_interface():
                 return (
                     getattr(interface, "network_name", interface_name),
                     interface_name,
+                    interface_ip,
                 )
 
         for interface in conf.ifaces.values():
@@ -90,6 +96,7 @@ def resolve_capture_interface():
                 return (
                     getattr(interface, "network_name", fallback_name),
                     fallback_name,
+                    interface_ip,
                 )
 
         print(
@@ -99,7 +106,7 @@ def resolve_capture_interface():
             flush=True,
         )
 
-    return default_iface, default_iface
+    return default_iface, default_iface, getattr(conf.iface, "ip", None)
 
 
 # ---------------------------------------------------------
@@ -160,7 +167,7 @@ def capture_traffic(duration=5):
 
     packets = []
     alerts = []
-    capture_interface, interface_label = resolve_capture_interface()
+    capture_interface, interface_label, local_ip = resolve_capture_interface()
 
     def packet_handler(packet):
 
@@ -191,7 +198,7 @@ def capture_traffic(duration=5):
         iface=capture_interface,
     )
 
-    return packets, alerts, interface_label
+    return packets, alerts, interface_label, local_ip
 
 
 # ---------------------------------------------------------
@@ -202,7 +209,7 @@ def main():
 
     start_time = time.time()
 
-    packets, alerts, capture_interface = capture_traffic(5)
+    packets, alerts, capture_interface, local_ip = capture_traffic(5)
 
     result = {
         "success": True,
@@ -212,6 +219,7 @@ def main():
             2
         ),
         "capture_interface": capture_interface,
+        "local_ip": local_ip,
         "packet_count": len(packets),
         "alert_count": len(alerts),
         "packets": packets,
