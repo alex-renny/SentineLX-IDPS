@@ -8,6 +8,7 @@ from network.monitor import capture_traffic
 from detection.brute_force import BruteForceDetector
 from services.auth_event_reader import AuthEventReader
 from services.alert_manager import AlertManager
+from prevention.prevention_engine import PreventionEngine
 
 
 # ============================================================
@@ -176,7 +177,18 @@ def main():
     emit({
         "type": "ENGINE_INFO",
         "message": "SentinelX detection engine started",
-        "timestamp": datetime.now().isoformat()
+        "timestamp": datetime.now().isoformat(),
+        "prevention_mode": os.getenv(
+            "SENTINELX_PREVENTION_MODE",
+            "test"
+        ).lower(),
+        "prevention_auto_block": os.getenv(
+            "SENTINELX_PREVENTION_AUTO_BLOCK",
+            "false"
+        ).lower() == "true",
+        "preventable_types": sorted(
+            PreventionEngine.PREVENTABLE_TYPES
+        ),
     })
 
     while True:

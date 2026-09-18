@@ -1,5 +1,24 @@
 import mongoose from "mongoose";
 
+const timelineSchema = new mongoose.Schema(
+  {
+    status: {
+      type: String,
+      enum: ["DETECTED", "INVESTIGATING", "BLOCKED", "RESOLVED"],
+      required: true,
+    },
+    at: {
+      type: Date,
+      default: Date.now,
+    },
+    note: {
+      type: String,
+      default: "",
+    },
+  },
+  { _id: false }
+);
+
 const alertSchema = new mongoose.Schema(
   {
     type: {
@@ -78,6 +97,16 @@ const alertSchema = new mongoose.Schema(
       default: "NONE",
     },
 
+    prevention: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+
+    timeline: {
+      type: [timelineSchema],
+      default: [],
+    },
+
     detected_at: {
       type: Date,
       default: Date.now,
@@ -88,5 +117,12 @@ const alertSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+export const ALERT_TRANSITIONS = {
+  DETECTED: ["INVESTIGATING", "BLOCKED", "RESOLVED"],
+  INVESTIGATING: ["BLOCKED", "RESOLVED"],
+  BLOCKED: ["RESOLVED"],
+  RESOLVED: [],
+};
 
 export default mongoose.model("Alert", alertSchema);

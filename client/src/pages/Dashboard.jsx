@@ -13,6 +13,7 @@ import {
 
 import Layout from "../components/layout/Layout";
 import StatCard from "../components/cards/StatCard";
+import AlertCard from "../components/alerts/AlertCard";
 import api from "../services/api";
 import socket from "../services/socket";
 
@@ -24,6 +25,8 @@ export default function Dashboard() {
   const [engineStatus, setEngineStatus] = useState("Connecting");
   const [captureStatus, setCaptureStatus] = useState(null);
   const [detectorStatus, setDetectorStatus] = useState(null);
+  const [preventionMode, setPreventionMode] = useState("test");
+  const [prevention, setPrevention] = useState(null);
   const engineOnline = engineStatus === "Online" && !error;
 
   const fetchSystemStats = async () => {
@@ -69,6 +72,20 @@ export default function Dashboard() {
 
   fetchAlerts();
 
+  const fetchPrevention = async () => {
+    try {
+      const response = await api.get("/alerts/prevention");
+      if (response.data.success) {
+        setPreventionMode(response.data.prevention.mode);
+        setPrevention(response.data.prevention);
+      }
+    } catch (err) {
+      console.error("Prevention status error:", err);
+    }
+  };
+
+  fetchPrevention();
+
   // ----------------------------------------------------------
   // ENGINE STATUS
   // ----------------------------------------------------------
@@ -95,6 +112,10 @@ export default function Dashboard() {
 
     if (data.detectors) {
       setDetectorStatus(data.detectors);
+    }
+
+    if (data.preventionMode) {
+      setPreventionMode(data.preventionMode);
     }
   };
 
@@ -128,6 +149,16 @@ export default function Dashboard() {
     });
   };
 
+  const handleAlertUpdated = (alert) => {
+    setAlerts((previous) =>
+      previous.map((item) =>
+        (item._id || item.id) === (alert._id || alert.id)
+          ? { ...item, ...alert }
+          : item
+      )
+    );
+  };
+
   // ----------------------------------------------------------
   // SOCKET.IO LISTENERS
   // ----------------------------------------------------------
@@ -140,6 +171,11 @@ export default function Dashboard() {
   socket.on(
     "security-alert",
     handleSecurityAlert
+  );
+
+  socket.on(
+    "alert-updated",
+    handleAlertUpdated
   );
 
   // ----------------------------------------------------------
@@ -155,6 +191,11 @@ export default function Dashboard() {
     socket.off(
       "security-alert",
       handleSecurityAlert
+    );
+
+    socket.off(
+      "alert-updated",
+      handleAlertUpdated
     );
   };
 }, []);
@@ -404,7 +445,11 @@ export default function Dashboard() {
             <SecurityStatus
               icon={Ban}
               title="Prevention Engine"
-              status="Standby"
+              status={
+                preventionMode === "active"
+                  ? "Active firewall"
+                  : "Test mode"
+              }
             />
           </div>
 
@@ -462,123 +507,20 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-3">
             {alerts.map((alert) => (
-              <div
+              <AlertCard
                 key={alert._id || alert.id}
-                className="rounded-xl border border-red-500/20 bg-red-500/5 p-4"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-                  <div className="flex items-start gap-3">
-                    <div className="rounded-lg bg-red-500/10 p-2 text-red-400">
-                      <ShieldAlert size={18} />
-                    </div>
-
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-red-400">
-                          {alert.type}
-                        </span>
-
-                        <span className="rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-400">
-                          {alert.severity}
-                        </span>
-                      </div>
-
-                      <p className="mt-1 text-sm text-slate-400">
-                        {alert.message}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="text-left sm:text-right">
-                    <p className="font-mono text-xs text-cyan-400">
-                      {alert.source_ip || "Unknown IP"}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-slate-600">
-                      {alert.received_at
-                        ? new Date(
-                            alert.received_at
-                          ).toLocaleTimeString()
-                        : ""}
-                    </p>
-                  </div>
-
-                </div>
-
-                {(alert.ports_detected || alert.window_seconds) && (
-                  <div className="mt-3 flex flex-wrap gap-2">
-
-                    {alert.ports_detected && (
-                      <span className="rounded-lg border border-orange-500/10 bg-orange-500/5 px-3 py-1.5 text-[11px] text-orange-400">
-                        🔌 {alert.ports_detected} ports detected
-                      </span>
-                    )}
-
-                    {alert.window_seconds && (
-                      <span className="rounded-lg border border-purple-500/10 bg-purple-500/5 px-3 py-1.5 text-[11px] text-purple-400">
-                        ⏱️ {alert.window_seconds}s detection window
-                      </span>
-                    )}
-
-                    {alert.attempts > 0 && (
-                      <span className="rounded-lg border border-yellow-500/10 bg-yellow-500/5 px-3 py-1.5 text-[11px] text-yellow-300">
-                        🔐 {alert.attempts} failed {alert.service || "login"} attempts
-                      </span>
-                    )}
-
-                    {alert.packets_per_second > 0 && (
-                      <span className="rounded-lg border border-red-500/10 bg-red-500/5 px-3 py-1.5 text-[11px] text-red-300">
-                        🌊 {alert.packets_per_second} packets/s (limit {alert.threshold})
-                      </span>
-                    )}
-
-                    {alert.target && (
-                      <span className="rounded-lg border border-cyan-500/10 bg-cyan-500/5 px-3 py-1.5 text-[11px] text-cyan-300">
-                        Target: {alert.target}
-                      </span>
-                    )}
-
-                  </div>
-                )}
-
-                {alert.prevention && (
-                  <div className="mt-3 rounded-xl border border-emerald-500/10 bg-emerald-500/5 p-3">
-                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
-
-                      <span className="font-semibold text-emerald-400">
-                        🛡️ Prevention
-                      </span>
-
-                      <span className="text-slate-400">
-                        Action:
-                        <span className="ml-1 font-semibold text-emerald-300">
-                          {alert.prevention.action || "PROCESSED"}
-                        </span>
-                      </span>
-
-                      {alert.prevention.mode && (
-                        <span className="text-slate-400">
-                          Mode:
-                          <span className="ml-1 font-semibold text-cyan-400">
-                            {alert.prevention.mode}
-                          </span>
-                        </span>
-                      )}
-
-                      {alert.prevention.ip && (
-                        <span className="font-mono text-slate-400">
-                          IP:
-                          <span className="ml-1 text-cyan-400">
-                            {alert.prevention.ip}
-                          </span>
-                        </span>
-                      )}
-
-                    </div>
-                  </div>
-                )}
-              </div>
+                alert={alert}
+                prevention={prevention}
+                onUpdated={(updated) =>
+                  setAlerts((previous) =>
+                    previous.map((item) =>
+                      (item._id || item.id) === (updated._id || updated.id)
+                        ? { ...item, ...updated }
+                        : item
+                    )
+                  )
+                }
+              />
             ))}
           </div>
         )}

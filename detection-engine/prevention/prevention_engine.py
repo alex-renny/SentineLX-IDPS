@@ -1,11 +1,19 @@
 import ipaddress
 import os
+import socket
 import sys
-import subprocess
 from datetime import datetime
+
+from prevention.firewall import WindowsFirewall
 
 
 class PreventionEngine:
+
+    PREVENTABLE_TYPES = {
+        "PORT_SCAN",
+        "BRUTE_FORCE",
+        "DDOS",
+    }
 
     def __init__(self):
         self.mode = os.getenv(
@@ -13,224 +21,245 @@ class PreventionEngine:
             "test"
         ).lower()
 
-        self.rule_prefix = "SentinelX-IDPS-BLOCK"
+        if self.mode not in {"test", "active"}:
+            self.mode = "test"
+
+        self.auto_block = os.getenv(
+            "SENTINELX_PREVENTION_AUTO_BLOCK",
+            "false"
+        ).lower() == "true"
+
+        self.rule_prefix = WindowsFirewall.PREFIX
+        self.blocked_ips = []
+        self.allowlist = self._load_allowlist()
 
         print(
             f"[PREVENTION] Prevention Engine initialized "
-            f"(mode={self.mode})",
+            f"(mode={self.mode}, auto_block={self.auto_block})",
             file=sys.stderr,
             flush=True
         )
 
-    # ========================================================
-    # IP VALIDATION
-    # ========================================================
+    def _load_allowlist(self):
+        raw = os.getenv("SENTINELX_PREVENTION_ALLOWLIST", "")
+        values = {item.strip() for item in raw.split(",") if item.strip()}
+        values.update(self._local_ips())
+        return values
 
-    def validate_ip(self, ip):
+    def _local_ips(self):
+        local = {"127.0.0.1", "0.0.0.0"}
 
         try:
+            hostname = socket.gethostname()
+            for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+                local.add(info[4][0])
+        except OSError:
+            pass
+
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.connect(("8.8.8.8", 80))
+                local.add(sock.getsockname()[0])
+        except OSError:
+            pass
+
+        return local
+
+    def validate_ip(self, ip):
+        try:
             address = ipaddress.ip_address(ip)
-
-            if address.is_unspecified:
-                return False
-
-            if address.is_multicast:
-                return False
-
-            if address.is_loopback:
-                return False
-
-            return True
-
         except ValueError:
             return False
 
-    # ========================================================
-    # RULE NAME
-    # ========================================================
+        if address.version != 4:
+            return False
+
+        if address.is_unspecified:
+            return False
+
+        if address.is_multicast:
+            return False
+
+        if address.is_loopback:
+            return False
+
+        if address.is_link_local:
+            return False
+
+        if ip in self.allowlist:
+            return False
+
+        return True
 
     def rule_name(self, ip):
+        return WindowsFirewall.rule_name(ip)
 
-        safe_ip = ip.replace(":", "_").replace(".", "_")
+    def should_prevent(self, alert_type):
+        return alert_type in self.PREVENTABLE_TYPES
 
-        return f"{self.rule_prefix}-{safe_ip}"
+    def _remember_block(self, ip, rule, action):
+        self.blocked_ips = [
+            item for item in self.blocked_ips if item.get("ip") != ip
+        ]
+        self.blocked_ips.append({
+            "ip": ip,
+            "rule": rule,
+            "action": action,
+            "timestamp": datetime.now().isoformat(),
+        })
 
-    # ========================================================
-    # BLOCK IP
-    # ========================================================
+    def _forget_block(self, ip):
+        self.blocked_ips = [
+            item for item in self.blocked_ips if item.get("ip") != ip
+        ]
 
-    def block_ip(self, ip, reason="Security alert"):
-
+    def list_rules(self):
         timestamp = datetime.now().isoformat()
 
-        if not self.validate_ip(ip):
-
+        try:
+            result = WindowsFirewall.list_rules()
+        except Exception as error:
             return {
                 "success": False,
-                "action": "BLOCK",
+                "action": "LIST_FAILED",
+                "rules": [],
+                "mode": self.mode,
+                "error": str(error),
+                "timestamp": timestamp,
+            }
+
+        return {
+            **result,
+            "mode": self.mode,
+            "auto_block": self.auto_block,
+            "timestamp": timestamp,
+        }
+
+    def block_ip(self, ip, reason="Security alert", source="manual"):
+        timestamp = datetime.now().isoformat()
+        origin = "auto" if source == "auto" else "manual"
+
+        if not self.validate_ip(ip):
+            return {
+                "success": False,
+                "action": "BLOCK_REJECTED",
                 "ip": ip,
-                "reason": "Invalid or protected IP",
-                "timestamp": timestamp
+                "reason": "Invalid, local, or protected IP",
+                "mode": self.mode,
+                "source": origin,
+                "timestamp": timestamp,
             }
 
         rule = self.rule_name(ip)
 
-        # ----------------------------------------------------
-        # TEST MODE
-        # ----------------------------------------------------
-
         if self.mode != "active":
-
-            return {
+            result = {
                 "success": True,
                 "action": "BLOCK_SIMULATED",
                 "ip": ip,
                 "rule": rule,
                 "reason": reason,
                 "mode": self.mode,
-                "timestamp": timestamp
+                "source": origin,
+                "timestamp": timestamp,
             }
+            self._remember_block(ip, rule, result["action"])
+            return result
 
-        # ----------------------------------------------------
-        # ACTIVE WINDOWS FIREWALL BLOCK
-        # ----------------------------------------------------
-
-        command = [
-            "powershell",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            (
-                f"New-NetFirewallRule "
-                f"-DisplayName '{rule}' "
-                f"-Direction Inbound "
-                f"-Action Block "
-                f"-RemoteAddress '{ip}' "
-                f"-Profile Any "
-                f"-Enabled True "
-                f"-ErrorAction Stop"
-            )
-        ]
-
-        try:
-
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
-
-            if result.returncode != 0:
-
-                return {
-                    "success": False,
-                    "action": "BLOCK_FAILED",
-                    "ip": ip,
-                    "rule": rule,
-                    "reason": reason,
-                    "error": result.stderr.strip(),
-                    "timestamp": timestamp
-                }
-
+        if origin == "auto" and not self.auto_block:
             return {
                 "success": True,
-                "action": "BLOCKED",
+                "action": "BLOCK_PENDING",
                 "ip": ip,
                 "rule": rule,
                 "reason": reason,
                 "mode": self.mode,
-                "timestamp": timestamp
+                "source": origin,
+                "message": (
+                    "Detection validated this IP. Confirm Block IP in the "
+                    "dashboard to create a Windows Firewall rule."
+                ),
+                "timestamp": timestamp,
             }
 
+        try:
+            firewall_result = WindowsFirewall.block_ip(ip)
         except Exception as error:
-
             return {
                 "success": False,
                 "action": "BLOCK_FAILED",
                 "ip": ip,
                 "rule": rule,
                 "reason": reason,
+                "mode": self.mode,
+                "source": origin,
                 "error": str(error),
-                "timestamp": timestamp
+                "timestamp": timestamp,
             }
 
-    # ========================================================
-    # UNBLOCK IP
-    # ========================================================
+        result = {
+            **firewall_result,
+            "reason": reason,
+            "mode": self.mode,
+            "source": origin,
+            "timestamp": timestamp,
+            "rule": firewall_result.get("rule", rule),
+        }
+
+        if result.get("success"):
+            self._remember_block(ip, result["rule"], result["action"])
+
+        return result
 
     def unblock_ip(self, ip):
-
         timestamp = datetime.now().isoformat()
 
-        if not self.validate_ip(ip):
-
+        try:
+            WindowsFirewall._validate_ip(ip)
+        except ValueError:
             return {
                 "success": False,
-                "action": "UNBLOCK",
+                "action": "UNBLOCK_REJECTED",
                 "ip": ip,
                 "reason": "Invalid IP",
-                "timestamp": timestamp
+                "mode": self.mode,
+                "timestamp": timestamp,
             }
 
         rule = self.rule_name(ip)
 
-        # ----------------------------------------------------
-        # TEST MODE
-        # ----------------------------------------------------
-
         if self.mode != "active":
-
+            self._forget_block(ip)
             return {
                 "success": True,
                 "action": "UNBLOCK_SIMULATED",
                 "ip": ip,
                 "rule": rule,
                 "mode": self.mode,
-                "timestamp": timestamp
+                "timestamp": timestamp,
             }
-
-        # ----------------------------------------------------
-        # REMOVE WINDOWS FIREWALL RULE
-        # ----------------------------------------------------
-
-        command = [
-            "powershell",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            (
-                f"Remove-NetFirewallRule "
-                f"-DisplayName '{rule}' "
-                f"-ErrorAction SilentlyContinue"
-            )
-        ]
 
         try:
-
-            result = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                timeout=15
-            )
-
-            return {
-                "success": result.returncode == 0,
-                "action": "UNBLOCKED",
-                "ip": ip,
-                "rule": rule,
-                "mode": self.mode,
-                "timestamp": timestamp
-            }
-
+            firewall_result = WindowsFirewall.unblock_ip(ip)
         except Exception as error:
-
             return {
                 "success": False,
                 "action": "UNBLOCK_FAILED",
                 "ip": ip,
                 "rule": rule,
+                "mode": self.mode,
                 "error": str(error),
-                "timestamp": timestamp
+                "timestamp": timestamp,
             }
+
+        result = {
+            **firewall_result,
+            "mode": self.mode,
+            "timestamp": timestamp,
+            "rule": firewall_result.get("rule", rule),
+        }
+
+        if result.get("success"):
+            self._forget_block(ip)
+
+        return result

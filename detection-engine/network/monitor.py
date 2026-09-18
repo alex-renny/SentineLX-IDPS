@@ -48,9 +48,10 @@ ddos_detector = DDoSDetector(
 def resolve_capture_interface():
     """Return the configured Scapy interface and a dashboard-safe label.
 
-    Set SENTINELX_CAPTURE_INTERFACE to an Npcap interface name when needed.
+    Set SENTINELX_CAPTURE_INTERFACE to a known adapter name when needed.
     Otherwise SENTINELX_CAPTURE_IP selects the interface owning that IPv4
-    address. This avoids accidentally falling back to a VPN or virtual NIC.
+    address, but if the IP is stale or unavailable we fall back to the first
+    active local interface instead of crashing the engine.
     """
 
     configured_interface = os.getenv("SENTINELX_CAPTURE_INTERFACE")
@@ -59,17 +60,42 @@ def resolve_capture_interface():
         return configured_interface, configured_interface
 
     capture_ip = os.getenv("SENTINELX_CAPTURE_IP")
+    default_iface = getattr(conf.iface, "name", str(conf.iface))
 
     if capture_ip:
         for interface in conf.ifaces.values():
-            if getattr(interface, "ip", None) == capture_ip:
-                return interface.network_name, interface.name
+            interface_ip = getattr(interface, "ip", None)
+            interface_name = getattr(interface, "name", str(interface))
 
-        raise RuntimeError(
-            f"No Scapy interface owns SENTINELX_CAPTURE_IP={capture_ip}"
+            if interface_ip == capture_ip:
+                return (
+                    getattr(interface, "network_name", interface_name),
+                    interface_name,
+                )
+
+        for interface in conf.ifaces.values():
+            interface_ip = getattr(interface, "ip", None)
+            if interface_ip:
+                fallback_name = getattr(interface, "name", str(interface))
+                print(
+                    "[network.monitor] SENTINELX_CAPTURE_IP is unavailable; "
+                    f"falling back to {fallback_name} instead of {capture_ip}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                return (
+                    getattr(interface, "network_name", fallback_name),
+                    fallback_name,
+                )
+
+        print(
+            "[network.monitor] No usable Scapy interface found for "
+            f"SENTINELX_CAPTURE_IP={capture_ip}; using default {default_iface}",
+            file=sys.stderr,
+            flush=True,
         )
 
-    return conf.iface, str(conf.iface)
+    return default_iface, default_iface
 
 
 # ---------------------------------------------------------

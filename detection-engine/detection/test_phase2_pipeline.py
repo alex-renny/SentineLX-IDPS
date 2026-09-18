@@ -10,8 +10,11 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from scapy.all import conf
+
 from detection.brute_force import BruteForceDetector
 from detection.ddos import DDoSDetector
+from network.monitor import resolve_capture_interface
 from services.auth_event_reader import AuthEventReader
 from services.alert_manager import AlertManager
 
@@ -54,6 +57,9 @@ def test_brute_force():
 
     processed = AlertManager().process_alert(alert)
     assert processed and processed["prevention"]
+    assert processed["prevention"]["action"] == "BLOCK_SIMULATED"
+    assert processed["status"] == "DETECTED"
+    assert processed["timeline"][0]["status"] == "DETECTED"
 
 
 def test_ddos():
@@ -76,8 +82,20 @@ def test_ddos():
     assert alert["packets_per_second"] == 1000
 
 
+def test_resolve_capture_interface_falls_back_for_unknown_ip(monkeypatch):
+    monkeypatch.delenv("SENTINELX_CAPTURE_INTERFACE", raising=False)
+    monkeypatch.setenv("SENTINELX_CAPTURE_IP", "192.168.255.255")
+
+    interface_name, label = resolve_capture_interface()
+
+    assert interface_name
+    assert label
+    assert interface_name in (str(conf.iface), getattr(conf.iface, "name", str(conf.iface)))
+
+
 if __name__ == "__main__":
     test_auth_event_reader()
     test_brute_force()
     test_ddos()
+    test_resolve_capture_interface_falls_back_for_unknown_ip()
     print("Phase 2 brute-force and DDoS pipeline: PASS")

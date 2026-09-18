@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard";
 import Network from "./pages/Network";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import Threats from "./pages/Threats";
 import Login from "./pages/Login";
 import { useEffect } from "react";
 import socket from "./services/socket";
@@ -21,6 +22,7 @@ function App() {
     <Routes>
       <Route path="/" element={<Dashboard />} />
       <Route path="/network" element={<Network />} />
+      <Route path="/threats" element={<Threats />} />
       <Route path="/reports" element={<Reports />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/login" element={<Login />} />

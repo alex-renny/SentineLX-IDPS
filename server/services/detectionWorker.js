@@ -31,6 +31,11 @@ export function startDetectionWorker() {
     {
       cwd: path.dirname(workerPath),
       stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        SENTINELX_PREVENTION_MODE:
+          process.env.SENTINELX_PREVENTION_MODE || "test",
+      },
     }
   );
 
@@ -49,7 +54,16 @@ export function startDetectionWorker() {
             `🛡️ Detection Engine: ${event.status}`
           );
 
-          broadcastEngineStatus(event.status);
+          broadcastEngineStatus(event.status, {
+            preventionMode: event.prevention_mode,
+          });
+        }
+
+        if (event.type === "ENGINE_INFO") {
+          broadcastEngineStatus("STARTED", {
+            preventionMode: event.prevention_mode,
+            preventableTypes: event.preventable_types,
+          });
         }
 
         if (event.type === "SCAN_COMPLETE") {

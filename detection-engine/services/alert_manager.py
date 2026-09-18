@@ -66,19 +66,50 @@ class AlertManager:
         source_ip = normalized.get("source_ip")
         alert_type = normalized.get("type")
 
-        if source_ip and alert_type in [
-            "PORT_SCAN",
-            "BRUTE_FORCE"
-        ]:
+        if source_ip and self.prevention_engine.should_prevent(alert_type):
 
             prevention_result = (
                 self.prevention_engine.block_ip(
                     source_ip,
-                    reason=f"{alert_type} detected"
+                    reason=f"{alert_type} detected",
+                    source="auto",
                 )
             )
 
         normalized["prevention"] = prevention_result
+        normalized["prevention_action"] = (
+            prevention_result.get("action")
+            if prevention_result
+            else "NONE"
+        )
+
+        timeline = [
+            {
+                "status": "DETECTED",
+                "at": normalized["detected_at"],
+                "note": "Alert created by detection engine",
+            }
+        ]
+
+        if (
+            prevention_result
+            and prevention_result.get("success")
+            and prevention_result.get("action") == "BLOCKED"
+        ):
+            normalized["status"] = "BLOCKED"
+            timeline.append({
+                "status": "BLOCKED",
+                "at": datetime.now().isoformat(),
+                "note": (
+                    f"Windows Firewall rule {prevention_result.get('rule')}"
+                    if prevention_result.get("rule")
+                    else "Automatic prevention"
+                ),
+            })
+        else:
+            normalized["status"] = "DETECTED"
+
+        normalized["timeline"] = timeline
 
         return normalized
 
@@ -91,6 +122,8 @@ class AlertManager:
 
         return {
     "id": self._generate_id(),
+
+    "status": "DETECTED",
 
     "type": alert.get(
         "type",
@@ -178,11 +211,14 @@ class AlertManager:
         # blocked_ips, so safely return an empty list
         # if the attribute does not exist.
 
-        return getattr(
-            self.prevention_engine,
-            "blocked_ips",
-            []
-        )
+        return [
+            item.get("ip", item) if isinstance(item, dict) else item
+            for item in getattr(
+                self.prevention_engine,
+                "blocked_ips",
+                []
+            )
+        ]
 
 
     # ========================================================
