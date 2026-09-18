@@ -3,9 +3,9 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 import {
-  broadcastAlert,
   broadcastEngineStatus,
   broadcastNetworkTraffic,
+  broadcastAlert,
 } from "./alertService.js";
 import { updateNetworkTelemetry } from "./networkTelemetryService.js";
 import { audit } from "./auditService.js";
