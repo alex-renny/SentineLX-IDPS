@@ -6,8 +6,11 @@ import {
   FileText,
   Settings,
   Shield,
+  Users,
   X,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "../../context/useAuth";
 
 const navigation = [
   {
@@ -21,7 +24,7 @@ const navigation = [
     icon: Network,
   },
   {
-    name: "Threats",
+    name: "Alerts",
     path: "/threats",
     icon: ShieldAlert,
   },
@@ -34,10 +37,14 @@ const navigation = [
     name: "Settings",
     path: "/settings",
     icon: Settings,
+    adminOnly: true,
   },
+  { name: "Prevention", path: "/prevention", icon: Shield, adminOnly: true },
+  { name: "User Management", path: "/users", icon: Users, adminOnly: true },
 ];
 
 export default function Sidebar({ mobileOpen, setMobileOpen }) {
+  const { isAdmin, signOut } = useAuth();
   return (
     <>
       {/* Mobile overlay */}
@@ -89,7 +96,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
             Security Operations
           </p>
 
-          {navigation.map((item) => {
+          {navigation.filter((item) => !item.adminOnly || isAdmin).map((item) => {
             const Icon = item.icon;
 
             return (
@@ -131,6 +138,7 @@ export default function Sidebar({ mobileOpen, setMobileOpen }) {
               Detection engine is operational.
             </p>
           </div>
+          <button onClick={() => { signOut(); window.location.assign("/login"); }} className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300 hover:bg-slate-900 hover:text-white"><LogOut size={16} />Logout</button>
         </div>
       </aside>
     </>

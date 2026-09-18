@@ -56,7 +56,7 @@ export default function Threats() {
   };
 
   useEffect(() => {
-    fetchData();
+    const initialFetch = window.setTimeout(fetchData, 0);
 
     const handleSecurityAlert = (data) => {
       const alert = data.alert || data;
@@ -83,6 +83,7 @@ export default function Threats() {
     socket.on("alert-updated", handleAlertUpdated);
 
     return () => {
+      window.clearTimeout(initialFetch);
       socket.off("security-alert", handleSecurityAlert);
       socket.off("alert-updated", handleAlertUpdated);
     };

@@ -4,8 +4,10 @@ import {
   ShieldCheck,
   ChevronDown,
 } from "lucide-react";
+import { useAuth } from "../../context/useAuth";
 
 export default function Navbar({ setMobileOpen }) {
+  const { user, signOut } = useAuth();
   return (
     <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-800 bg-slate-950/90 px-4 backdrop-blur-xl sm:px-6 lg:px-8">
       {/* Left */}
@@ -47,13 +49,13 @@ export default function Navbar({ setMobileOpen }) {
         </button>
 
         {/* User */}
-        <button className="hidden items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 sm:flex">
+        <button onClick={() => { signOut(); window.location.assign("/login"); }} className="hidden items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 sm:flex" title="Sign out">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-cyan-500/10 text-xs font-bold text-cyan-400">
-            A
+            {(user?.username || "?").slice(0, 1).toUpperCase()}
           </div>
 
           <span className="text-sm text-slate-300">
-            Analyst
+            {user?.username || "User"} · {user?.role || "user"}
           </span>
 
           <ChevronDown size={15} className="text-slate-500" />

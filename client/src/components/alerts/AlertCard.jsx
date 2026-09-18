@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ShieldAlert } from "lucide-react";
-import api from "../../services/api";
+import { useAuth } from "../../context/useAuth";
+import { updateAlertWorkflow } from "../../services/alertWorkflow";
 
 const STATUS_STYLES = {
   DETECTED: "border-red-500/20 bg-red-500/10 text-red-400",
@@ -10,13 +11,6 @@ const STATUS_STYLES = {
 };
 
 const LIFECYCLE = ["DETECTED", "INVESTIGATING", "BLOCKED", "RESOLVED"];
-
-export async function updateAlertWorkflow(alertId, action, body = {}) {
-  const response = await api.post(`/alerts/${alertId}/${action}`, body, {
-    timeout: 30000,
-  });
-  return response.data.alert;
-}
 
 function ruleNameFor(ip, prefix = "SentinelX-IDPS-BLOCK") {
   if (!ip) {
@@ -32,6 +26,7 @@ export default function AlertCard({
   showTimeline = false,
   prevention,
 }) {
+  const { isAdmin } = useAuth();
   const status = alert.status || "DETECTED";
   const [busy, setBusy] = useState(false);
   const [confirmBlock, setConfirmBlock] = useState(false);
@@ -236,7 +231,7 @@ export default function AlertCard({
         </div>
       )}
 
-      {confirmBlock && (
+      {isAdmin && confirmBlock && (
         <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
           <p className="text-sm font-semibold text-red-300">
             {liveBlocking
@@ -274,7 +269,7 @@ export default function AlertCard({
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      {isAdmin && <div className="mt-4 flex flex-wrap gap-2">
         {alert.type === "ABNORMAL_TRAFFIC" && (
           <span className="self-center text-xs text-amber-300">
             Observation only — no automatic firewall action.
@@ -319,7 +314,7 @@ export default function AlertCard({
             Unblock & Resolve
           </button>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

@@ -20,8 +20,9 @@ import alertRoutes from "./routes/alertRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import settingsRoutes from "./routes/settingsRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
 import { applyRuntimeSettings, getSettings } from "./services/settingsService.js";
-import { authenticate, verifySocket } from "./middleware/auth.js";
+import { authenticate, requireRole, verifySocket } from "./middleware/auth.js";
 import { allowMethods, rejectMongoOperators } from "./middleware/security.js";
 
 import connectDB from "./config/db.js";
@@ -86,13 +87,14 @@ app.use("/api/auth", rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHe
    ============================================================ */
 
 app.use("/api/auth", authRoutes);
-app.use("/api", authenticate);
+app.use("/api", authenticate, requireRole("admin", "user"));
 app.use("/api/system", systemRoutes);
 app.use("/api/network", networkRoutes);
 app.use("/api/detection", detectionRoutes);
 app.use("/api/alerts", alertRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/users", userRoutes);
 
 /* ============================================================
    ROOT

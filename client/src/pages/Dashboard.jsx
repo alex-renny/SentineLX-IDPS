@@ -59,11 +59,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchSystemStats();
+    const initialFetch = window.setTimeout(fetchSystemStats, 0);
 
     const interval = setInterval(fetchSystemStats, 3000);
 
-    return () => clearInterval(interval);
+    return () => { window.clearTimeout(initialFetch); clearInterval(interval); };
   }, []);
 
   useEffect(() => {

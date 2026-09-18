@@ -8,6 +8,7 @@ import {
   unblockIp,
 } from "../services/preventionService.js";
 import { audit } from "../services/auditService.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -63,7 +64,7 @@ router.get("/prevention", async (req, res) => {
   });
 });
 
-router.post("/prevention/unblock", async (req, res) => {
+router.post("/prevention/unblock", requireAdmin, async (req, res) => {
   try {
     const ip = String(req.body?.ip || "").trim();
 
@@ -167,7 +168,7 @@ router.get("/stats", async (req, res) => {
   }
 });
 
-router.patch("/:id/status", async (req, res) => {
+router.patch("/:id/status", requireAdmin, async (req, res) => {
   try {
     const nextStatus = String(req.body?.status || "").toUpperCase();
     const allowed = Object.keys(ALERT_TRANSITIONS);
@@ -208,7 +209,7 @@ router.patch("/:id/status", async (req, res) => {
   }
 });
 
-router.post("/:id/investigate", async (req, res) => {
+router.post("/:id/investigate", requireAdmin, async (req, res) => {
   try {
     const alert = await Alert.findById(req.params.id);
 
@@ -237,7 +238,7 @@ router.post("/:id/investigate", async (req, res) => {
   }
 });
 
-router.post("/:id/block", async (req, res) => {
+router.post("/:id/block", requireAdmin, async (req, res) => {
   try {
     const alert = await Alert.findById(req.params.id);
 
@@ -303,7 +304,7 @@ router.post("/:id/block", async (req, res) => {
   }
 });
 
-router.post("/:id/resolve", async (req, res) => {
+router.post("/:id/resolve", requireAdmin, async (req, res) => {
   try {
     const alert = await Alert.findById(req.params.id);
 
