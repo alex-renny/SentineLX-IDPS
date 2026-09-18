@@ -7,6 +7,7 @@ import {
   listFirewallRules,
   unblockIp,
 } from "../services/preventionService.js";
+import { audit } from "../services/auditService.js";
 
 const router = express.Router();
 
@@ -258,6 +259,10 @@ router.post("/:id/block", async (req, res) => {
       alert.source_ip,
       `Manual block for ${alert.type}`
     );
+    audit(prevention.success ? "PREVENTION_TRIGGERED" : "PREVENTION_FAILED", {
+      action: prevention.action,
+      alertType: alert.type,
+    });
 
     alert.prevention = prevention;
     alert.prevention_action = prevention.action || "NONE";

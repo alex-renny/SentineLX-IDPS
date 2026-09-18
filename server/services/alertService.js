@@ -1,4 +1,5 @@
 import Alert from "../models/Alert.js";
+import { audit } from "./auditService.js";
 
 let ioInstance = null;
 let currentEngineStatus = "STARTING";
@@ -16,6 +17,7 @@ export function broadcastEngineStatus(status, details = {}) {
     console.log(
       `⚠️ Socket.IO not ready. Engine status stored: ${status}`
     );
+    audit("ALERT_DETECTED", { type: savedAlert.type, severity: savedAlert.severity, status: savedAlert.status });
     return;
   }
 

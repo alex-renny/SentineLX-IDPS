@@ -8,6 +8,7 @@ import {
   broadcastNetworkTraffic,
 } from "./alertService.js";
 import { updateNetworkTelemetry } from "./networkTelemetryService.js";
+import { audit } from "./auditService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -27,6 +28,7 @@ export function startDetectionWorker() {
   }
 
   console.log("🛡️ Starting SentinelX detection engine...");
+  audit("ENGINE_STARTED");
   workerOutputBuffer = "";
 
   worker = spawn(
@@ -140,6 +142,7 @@ export function startDetectionWorker() {
     console.log(
       `🛑 Detection engine stopped with code ${code}`
     );
+    audit("ENGINE_STOPPED", { code });
 
     broadcastEngineStatus("STOPPED");
 
