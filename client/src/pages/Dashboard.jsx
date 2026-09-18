@@ -14,6 +14,7 @@ import {
 import Layout from "../components/layout/Layout";
 import StatCard from "../components/cards/StatCard";
 import AlertCard from "../components/alerts/AlertCard";
+import TrafficOverview from "../components/network/TrafficOverview";
 import api from "../services/api";
 import socket from "../services/socket";
 
@@ -27,7 +28,19 @@ export default function Dashboard() {
   const [detectorStatus, setDetectorStatus] = useState(null);
   const [preventionMode, setPreventionMode] = useState("test");
   const [prevention, setPrevention] = useState(null);
+  const [alertStats, setAlertStats] = useState(null);
+  const [traffic, setTraffic] = useState(null);
+  const [trafficHistory, setTrafficHistory] = useState([]);
   const engineOnline = engineStatus === "Online" && !error;
+
+  const refreshAlertStats = async () => {
+    try {
+      const response = await api.get("/alerts/stats");
+      if (response.data.success) setAlertStats(response.data.stats);
+    } catch (err) {
+      console.error("Alert statistics error:", err);
+    }
+  };
 
   const fetchSystemStats = async () => {
     try {
@@ -51,6 +64,44 @@ export default function Dashboard() {
     const interval = setInterval(fetchSystemStats, 3000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const [statsResponse, trafficResponse] = await Promise.all([
+          api.get("/alerts/stats"),
+          api.get("/network/traffic"),
+        ]);
+        if (statsResponse.data.success) setAlertStats(statsResponse.data.stats);
+        if (trafficResponse.data.success) applyTraffic(trafficResponse.data);
+      } catch (err) {
+        console.error("Dashboard security telemetry error:", err);
+      }
+    };
+
+    const applyTraffic = (nextTraffic) => {
+      setTraffic(nextTraffic);
+      const packetRate = nextTraffic.duration
+        ? Math.round((nextTraffic.packet_count || 0) / nextTraffic.duration)
+        : 0;
+      const bytes = (nextTraffic.packets || []).reduce(
+        (total, packet) => total + (Number(packet.packet_size) || 0),
+        0
+      );
+      setTrafficHistory((previous) => [
+        ...previous,
+        { time: new Date(nextTraffic.timestamp || Date.now()).toLocaleTimeString(), packets: packetRate, bytes },
+      ].slice(-12));
+    };
+
+    fetchDashboardData();
+    socket.on("NETWORK_TRAFFIC", applyTraffic);
+    const interval = setInterval(fetchDashboardData, 15000);
+    return () => {
+      socket.off("NETWORK_TRAFFIC", applyTraffic);
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {
@@ -147,6 +198,7 @@ export default function Dashboard() {
         ...previous,
       ].slice(0, 20);
     });
+    refreshAlertStats();
   };
 
   const handleAlertUpdated = (alert) => {
@@ -157,6 +209,7 @@ export default function Dashboard() {
           : item
       )
     );
+    refreshAlertStats();
   };
 
   // ----------------------------------------------------------
@@ -263,6 +316,14 @@ export default function Dashboard() {
           </div>
 
         </div>
+      </section>
+
+      {/* Security alert statistics */}
+      <section className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <SecurityStat title="Total alerts" value={alertStats?.total ?? 0} className="text-cyan-400" />
+        <SecurityStat title="Critical" value={alertStats?.critical ?? 0} className="text-red-400" />
+        <SecurityStat title="High" value={alertStats?.high ?? 0} className="text-orange-400" />
+        <SecurityStat title="Blocked" value={alertStats?.blocked ?? 0} className="text-emerald-400" />
       </section>
 
       {/* Stats */}
@@ -437,7 +498,7 @@ export default function Dashboard() {
               title="Traffic Flood Monitor"
               status={
                 detectorStatus
-                  ? `${detectorStatus.ddos.threshold} packets/s`
+                  ? `Burst ${detectorStatus.ddos.burst_threshold}/s · DDoS ${detectorStatus.ddos.sustained_threshold}/s sustained`
                   : "Waiting for engine"
               }
             />
@@ -468,6 +529,8 @@ export default function Dashboard() {
           )}
         </div>
       </section>
+
+      <TrafficOverview traffic={traffic} history={trafficHistory} />
 
       {/* Security Alerts */}
 
@@ -589,6 +652,15 @@ export default function Dashboard() {
         </div>
       </section>
     </Layout>
+  );
+}
+
+function SecurityStat({ title, value, className }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+      <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</p>
+      <p className={`mt-2 text-3xl font-bold ${className}`}>{value}</p>
+    </div>
   );
 }
 

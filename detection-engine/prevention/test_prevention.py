@@ -13,6 +13,7 @@ def main():
 
     os.environ["SENTINELX_PREVENTION_MODE"] = "test"
     os.environ["SENTINELX_PREVENTION_AUTO_BLOCK"] = "false"
+    os.environ["SENTINELX_FIREWALL_ENFORCEMENT"] = "disabled"
     engine = PreventionEngine()
 
     test_ip = "192.168.1.100"
@@ -50,6 +51,7 @@ def main():
 
     os.environ["SENTINELX_PREVENTION_MODE"] = "active"
     os.environ["SENTINELX_PREVENTION_AUTO_BLOCK"] = "false"
+    os.environ["SENTINELX_FIREWALL_ENFORCEMENT"] = "enabled"
     live_engine = PreventionEngine()
     assert live_engine.mode == "active"
 

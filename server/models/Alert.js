@@ -65,6 +65,20 @@ const alertSchema = new mongoose.Schema(
       default: 0,
     },
 
+    peak_packets_per_second: { type: Number, default: 0 },
+
+    sustained_packets_per_second: { type: Number, default: 0 },
+
+    sustained_window_seconds: { type: Number, default: 0 },
+
+    ddos_peak_threshold: { type: Number, default: 0 },
+
+    sustained_threshold: { type: Number, default: 0 },
+
+    classification: { type: String, default: "UNKNOWN" },
+
+    validation_reason: { type: String, default: "" },
+
     threshold: {
       type: Number,
       default: 0,

@@ -5,7 +5,9 @@ import { fileURLToPath } from "url";
 import {
   broadcastAlert,
   broadcastEngineStatus,
+  broadcastNetworkTraffic,
 } from "./alertService.js";
+import { updateNetworkTelemetry } from "./networkTelemetryService.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,6 +18,7 @@ const workerPath = path.resolve(
 );
 
 let worker = null;
+let workerOutputBuffer = "";
 
 export function startDetectionWorker() {
   if (worker) {
@@ -24,6 +27,7 @@ export function startDetectionWorker() {
   }
 
   console.log("🛡️ Starting SentinelX detection engine...");
+  workerOutputBuffer = "";
 
   worker = spawn(
     "python",
@@ -40,12 +44,17 @@ export function startDetectionWorker() {
   );
 
   worker.stdout.on("data", (data) => {
-    const lines = data
-      .toString()
+    // Python stdout chunks are not guaranteed to end at a JSON line boundary.
+    // Retain an incomplete line until the next chunk arrives.
+    workerOutputBuffer += data.toString();
+    const lines = workerOutputBuffer
       .split(/\r?\n/)
-      .filter(Boolean);
+    workerOutputBuffer = lines.pop() || "";
 
     for (const line of lines) {
+      if (!line) {
+        continue;
+      }
       try {
         const event = JSON.parse(line);
 
@@ -78,6 +87,9 @@ export function startDetectionWorker() {
             scannedAt: event.timestamp,
             detectors: event.detectors,
           });
+
+          const traffic = updateNetworkTelemetry(event);
+          broadcastNetworkTraffic(traffic);
         }
 
         if (event.type === "SECURITY_ALERT") {
@@ -132,6 +144,7 @@ export function startDetectionWorker() {
     broadcastEngineStatus("STOPPED");
 
     worker = null;
+    workerOutputBuffer = "";
   });
 }
 
@@ -145,6 +158,7 @@ export function stopDetectionWorker() {
   worker.kill();
 
   worker = null;
+  workerOutputBuffer = "";
 
   broadcastEngineStatus("STOPPED");
 }

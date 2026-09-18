@@ -318,6 +318,17 @@ router.post("/:id/resolve", async (req, res) => {
         unblock: prevention,
       };
       alert.prevention_action = prevention.action || alert.prevention_action;
+
+      if (!prevention.success) {
+        await alert.save();
+        emitAlertUpdated(alert.toObject());
+        return res.status(502).json({
+          success: false,
+          message: prevention.reason || prevention.error || "Unable to remove firewall rule",
+          alert: alert.toObject(),
+          prevention,
+        });
+      }
     }
 
     const updated = await transitionAlert(

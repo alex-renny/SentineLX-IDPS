@@ -28,6 +28,12 @@ class PreventionEngine:
             "SENTINELX_PREVENTION_AUTO_BLOCK",
             "false"
         ).lower() == "true"
+        # Active mode alone is not enough: Windows Firewall changes require a
+        # second, deliberate opt-in. This keeps copied .env files safe.
+        self.firewall_enforcement = os.getenv(
+            "SENTINELX_FIREWALL_ENFORCEMENT",
+            "disabled"
+        ).lower() == "enabled"
 
         self.rule_prefix = WindowsFirewall.PREFIX
         self.blocked_ips = []
@@ -35,7 +41,8 @@ class PreventionEngine:
 
         print(
             f"[PREVENTION] Prevention Engine initialized "
-            f"(mode={self.mode}, auto_block={self.auto_block})",
+            f"(mode={self.mode}, enforcement={self.firewall_enforcement}, "
+            f"auto_block={self.auto_block})",
             file=sys.stderr,
             flush=True
         )
@@ -65,31 +72,35 @@ class PreventionEngine:
 
         return local
 
-    def validate_ip(self, ip):
+    def normalize_ip(self, ip):
         try:
-            address = ipaddress.ip_address(ip)
-        except ValueError:
-            return False
+            address = ipaddress.ip_address(str(ip).strip())
+        except (ValueError, TypeError):
+            return None
 
         if address.version != 4:
-            return False
+            return None
 
         if address.is_unspecified:
-            return False
+            return None
 
         if address.is_multicast:
-            return False
+            return None
 
         if address.is_loopback:
-            return False
+            return None
 
         if address.is_link_local:
-            return False
+            return None
 
-        if ip in self.allowlist:
-            return False
+        normalized = str(address)
+        if normalized in self.allowlist:
+            return None
 
-        return True
+        return normalized
+
+    def validate_ip(self, ip):
+        return self.normalize_ip(ip) is not None
 
     def rule_name(self, ip):
         return WindowsFirewall.rule_name(ip)
@@ -131,6 +142,7 @@ class PreventionEngine:
         return {
             **result,
             "mode": self.mode,
+            "firewall_enforcement": "enabled" if self.firewall_enforcement else "disabled",
             "auto_block": self.auto_block,
             "timestamp": timestamp,
         }
@@ -139,7 +151,8 @@ class PreventionEngine:
         timestamp = datetime.now().isoformat()
         origin = "auto" if source == "auto" else "manual"
 
-        if not self.validate_ip(ip):
+        normalized_ip = self.normalize_ip(ip)
+        if not normalized_ip:
             return {
                 "success": False,
                 "action": "BLOCK_REJECTED",
@@ -150,9 +163,10 @@ class PreventionEngine:
                 "timestamp": timestamp,
             }
 
+        ip = normalized_ip
         rule = self.rule_name(ip)
 
-        if self.mode != "active":
+        if self.mode != "active" or not self.firewall_enforcement:
             result = {
                 "success": True,
                 "action": "BLOCK_SIMULATED",
@@ -160,6 +174,7 @@ class PreventionEngine:
                 "rule": rule,
                 "reason": reason,
                 "mode": self.mode,
+                "enforcement": "disabled",
                 "source": origin,
                 "timestamp": timestamp,
             }
@@ -214,9 +229,8 @@ class PreventionEngine:
     def unblock_ip(self, ip):
         timestamp = datetime.now().isoformat()
 
-        try:
-            WindowsFirewall._validate_ip(ip)
-        except ValueError:
+        normalized_ip = self.normalize_ip(ip)
+        if not normalized_ip:
             return {
                 "success": False,
                 "action": "UNBLOCK_REJECTED",
@@ -226,9 +240,10 @@ class PreventionEngine:
                 "timestamp": timestamp,
             }
 
+        ip = normalized_ip
         rule = self.rule_name(ip)
 
-        if self.mode != "active":
+        if self.mode != "active" or not self.firewall_enforcement:
             self._forget_block(ip)
             return {
                 "success": True,
@@ -236,6 +251,7 @@ class PreventionEngine:
                 "ip": ip,
                 "rule": rule,
                 "mode": self.mode,
+                "enforcement": "disabled",
                 "timestamp": timestamp,
             }
 

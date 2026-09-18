@@ -152,6 +152,20 @@ class AlertManager:
 
     "packets_per_second": alert.get("packets_per_second", 0),
 
+    "peak_packets_per_second": alert.get("peak_packets_per_second", 0),
+
+    "sustained_packets_per_second": alert.get("sustained_packets_per_second", 0),
+
+    "sustained_window_seconds": alert.get("sustained_window_seconds", 0),
+
+    "ddos_peak_threshold": alert.get("ddos_peak_threshold", 0),
+
+    "sustained_threshold": alert.get("sustained_threshold", 0),
+
+    "classification": alert.get("classification", alert.get("type", "UNKNOWN")),
+
+    "validation_reason": alert.get("validation_reason", ""),
+
     "threshold": alert.get("threshold", 0),
 
     "window_seconds": alert.get(

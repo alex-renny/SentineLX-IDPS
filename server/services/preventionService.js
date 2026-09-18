@@ -25,21 +25,28 @@ export function isAutoBlockEnabled() {
   );
 }
 
+export function isFirewallEnforcementEnabled() {
+  return String(process.env.SENTINELX_FIREWALL_ENFORCEMENT || "disabled")
+    .toLowerCase() === "enabled";
+}
+
 export function getPreventionConfig() {
   const mode = getPreventionMode();
   const autoBlock = isAutoBlockEnabled();
-  const liveBlocking = mode === "active";
+  const enforcementEnabled = isFirewallEnforcementEnabled();
+  const liveBlocking = mode === "active" && enforcementEnabled;
 
   return {
     mode,
     auto_block: autoBlock,
+    firewall_enforcement: enforcementEnabled ? "enabled" : "disabled",
     live_blocking: liveBlocking,
     rule_prefix: "SentinelX-IDPS-BLOCK",
     warning: liveBlocking
       ? autoBlock
         ? "Active mode with auto-block: detection can create real Windows Firewall rules immediately."
         : "Active mode: Block IP in the dashboard creates a real Windows Firewall rule. Detection only queues BLOCK_PENDING."
-      : "Test mode simulates blocks only. Set SENTINELX_PREVENTION_MODE=active to create real firewall rules.",
+      : "Test mode simulates blocks only. Real rules require SENTINELX_PREVENTION_MODE=active and SENTINELX_FIREWALL_ENFORCEMENT=enabled.",
   };
 }
 

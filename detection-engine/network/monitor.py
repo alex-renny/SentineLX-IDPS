@@ -38,6 +38,10 @@ detector = PortScanDetector(
 ddos_detector = DDoSDetector(
     threshold=int(os.getenv("SENTINELX_DDOS_THRESHOLD", "1000")),
     window_seconds=1,
+    ddos_peak_threshold=int(os.getenv("SENTINELX_DDOS_PEAK_THRESHOLD", "3000")),
+    sustained_threshold=int(os.getenv("SENTINELX_DDOS_SUSTAINED_THRESHOLD", "1500")),
+    sustained_window_seconds=int(os.getenv("SENTINELX_DDOS_SUSTAINED_WINDOW", "5")),
+    alert_cooldown_seconds=int(os.getenv("SENTINELX_DDOS_ALERT_COOLDOWN", "30")),
 )
 
 

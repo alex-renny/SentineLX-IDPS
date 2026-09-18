@@ -32,6 +32,10 @@ export function getEngineStatus() {
   return currentEngineStatus;
 }
 
+export function broadcastNetworkTraffic(traffic) {
+  ioInstance?.emit("NETWORK_TRAFFIC", traffic);
+}
+
 function buildTimeline(alert) {
   const detectedAt = alert.detected_at
     ? new Date(alert.detected_at)
@@ -88,6 +92,13 @@ export async function broadcastAlert(alert) {
       window_seconds: alert.window_seconds || 0,
       attempts: alert.attempts || 0,
       packets_per_second: alert.packets_per_second || 0,
+      peak_packets_per_second: alert.peak_packets_per_second || 0,
+      sustained_packets_per_second: alert.sustained_packets_per_second || 0,
+      sustained_window_seconds: alert.sustained_window_seconds || 0,
+      ddos_peak_threshold: alert.ddos_peak_threshold || 0,
+      sustained_threshold: alert.sustained_threshold || 0,
+      classification: alert.classification || alert.type || "UNKNOWN",
+      validation_reason: alert.validation_reason || "",
       threshold: alert.threshold || 0,
       target: alert.target || null,
       service: alert.service || null,

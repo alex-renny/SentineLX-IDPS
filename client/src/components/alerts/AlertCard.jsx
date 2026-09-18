@@ -90,6 +90,12 @@ export default function AlertCard({
             <p className="mt-1 text-sm text-slate-400">
               {alert.message}
             </p>
+
+            {alert.validation_reason && (
+              <p className="mt-2 text-[11px] text-amber-300">
+                Validation: {alert.validation_reason}
+              </p>
+            )}
           </div>
         </div>
 
@@ -157,6 +163,13 @@ export default function AlertCard({
           {alert.packets_per_second > 0 && (
             <span className="rounded-lg border border-red-500/10 bg-red-500/5 px-3 py-1.5 text-[11px] text-red-300">
               🌊 {alert.packets_per_second} packets/s (limit {alert.threshold})
+            </span>
+          )}
+
+          {alert.sustained_packets_per_second > 0 && (
+            <span className="rounded-lg border border-amber-500/10 bg-amber-500/5 px-3 py-1.5 text-[11px] text-amber-300">
+              📈 sustained {Math.round(alert.sustained_packets_per_second)} packets/s
+              {alert.sustained_window_seconds ? ` / ${alert.sustained_window_seconds}s` : ""}
             </span>
           )}
 
@@ -262,6 +275,11 @@ export default function AlertCard({
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
+        {alert.type === "ABNORMAL_TRAFFIC" && (
+          <span className="self-center text-xs text-amber-300">
+            Observation only — no automatic firewall action.
+          </span>
+        )}
         {status === "DETECTED" && (
           <button
             disabled={busy}

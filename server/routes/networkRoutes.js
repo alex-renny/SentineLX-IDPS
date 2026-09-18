@@ -1,13 +1,13 @@
 import express from "express";
-import { captureNetworkTraffic } from "../services/networkMonitor.js";
+import { getNetworkTelemetry } from "../services/networkTelemetryService.js";
 
 const router = express.Router();
 
 router.get("/traffic", async (req, res) => {
   try {
-    const traffic = await captureNetworkTraffic();
-
-    res.json(traffic);
+    // Traffic is captured by the single detection worker. Returning its latest
+    // scan prevents this endpoint from competing for the capture interface.
+    res.json(getNetworkTelemetry());
   } catch (error) {
     console.error(
       "Network monitoring error:",
